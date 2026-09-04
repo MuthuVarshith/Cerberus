@@ -73,8 +73,10 @@ class PatchAgent:
         self,
         candidate_files: List[str],
         patch_generator_fn: Callable[[int, str], str],
-        test_command: str = "py -3.13 -m pytest test_reproduce.py",
+        test_command: Optional[str] = None,
     ) -> PatchLoopResult:
+        if test_command is None:
+            test_command = f"{self.sandbox.python_cmd} -m pytest test_reproduce.py"
         history: List[PatchAttemptResult] = []
         seen_diffs: set[str] = set()
         feedback_str = "Initial attempt: please provide a minimal unified diff fixing the bug."

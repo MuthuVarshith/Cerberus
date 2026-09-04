@@ -128,8 +128,10 @@ class RegressionAgent:
     def run_regression_suite(
         self,
         expected_candidates: List[str],
-        test_suite_cmd: str = "py -3.13 -m pytest -k \"not reproduce\"",
+        test_suite_cmd: Optional[str] = None,
     ) -> RegressionReport:
+        if test_suite_cmd is None:
+            test_suite_cmd = f"{self.sandbox.python_cmd} -m pytest -k \"not reproduce\""
         blast_radius = self.analyze_structural_blast_radius(expected_candidates)
 
         start_t = time.time()

@@ -86,7 +86,7 @@ Given the following issue report, write a standalone Python test file named `tes
         self.sandbox.write_file("test_reproduce.py", test_code)
 
         # Execute test in sandbox
-        cmd = "py -3.13 -m pytest test_reproduce.py"
+        cmd = f"{self.sandbox.python_cmd} -m pytest test_reproduce.py"
         exec_res = self.sandbox.exec(cmd, timeout=30)
 
         # HARD RED GATE CHECK:

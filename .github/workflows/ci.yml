@@ -1,0 +1,62 @@
+name: CI
+
+# Must live at the repository root: GitHub Actions only discovers workflows in
+# <repo>/.github/workflows, never in a subdirectory. The project itself lives in
+# autonomous-pr-fixer/, so every run step sets its working directory there.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+defaults:
+  run:
+    working-directory: autonomous-pr-fixer
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both platforms are exercised on purpose: the harness builds shell
+        # command strings for its sandbox, so an interpreter regression shows up
+        # on only one OS.
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          # Built-in caching resolves the correct pip directory per OS; a
+          # hand-rolled actions/cache path (~/.cache/pip) is Linux-only.
+          cache: pip
+          cache-dependency-path: autonomous-pr-fixer/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+        # No secrets required: GitHub integration is exercised via dry-run paths.
+
+  secret-audit:
+    name: Hard-coded secret audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for common secret patterns
+        shell: bash
+        run: |
+          echo "Scanning for common secret patterns..."
+          if grep -rn "ghp_\|sk-\|AIza" --include="*.py" .; then
+            echo "ERROR: Possible hard-coded secrets found!"
+            exit 1
+          fi
+          echo "No hard-coded secrets detected."
