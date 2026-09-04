@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional, Set
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 
 logger = logging.getLogger(__name__)
-app = FastAPI(title="Autonomous Software Repair Webhook Service")
+app = FastAPI(title="Cerberus: Verification-First Autonomous Software Repair Service")
 _processed_delivery_ids: Set[str] = set()
 SUPPORTED_EVENTS = {"issues", "issue_comment"}
 
@@ -65,7 +65,7 @@ def _run_repair_pipeline(
 @app.get("/health")
 def health() -> Dict[str, str]:
     """Liveness probe."""
-    return {"status": "healthy", "service": "Autonomous Software Repair Harness"}
+    return {"status": "healthy", "service": "Cerberus: Verification-First Autonomous Software Repair Harness"}
 
 
 @app.post("/webhook")

@@ -1,5 +1,5 @@
 """
-Pipeline State Machine for the Verification-First Autonomous Software Repair Harness.
+Pipeline State Machine for Cerberus: Verification-First Autonomous Software Repair Harness.
 
 Defines all named pipeline states, terminal failure states, and valid transitions.
 PipelineStateMachine enforces that only declared transitions can occur;
@@ -32,6 +32,7 @@ class PipelineState(str, Enum):
     ADMITTED = "ADMITTED"
     REJECTED_NON_REPRODUCIBLE = "REJECTED_NON_REPRODUCIBLE"
     REJECTED_PATCH_FAILED = "REJECTED_PATCH_FAILED"
+    REJECTED_EMPTY_PATCH = "REJECTED_EMPTY_PATCH"
     REJECTED_REGRESSION = "REJECTED_REGRESSION"
     REJECTED_BLAST_RADIUS = "REJECTED_BLAST_RADIUS"
     REJECTED_ADMISSION = "REJECTED_ADMISSION"
@@ -42,6 +43,7 @@ TERMINAL_STATES: FrozenSet[PipelineState] = frozenset({
     PipelineState.ADMITTED,
     PipelineState.REJECTED_NON_REPRODUCIBLE,
     PipelineState.REJECTED_PATCH_FAILED,
+    PipelineState.REJECTED_EMPTY_PATCH,
     PipelineState.REJECTED_REGRESSION,
     PipelineState.REJECTED_BLAST_RADIUS,
     PipelineState.REJECTED_ADMISSION,
@@ -51,6 +53,7 @@ TERMINAL_STATES: FrozenSet[PipelineState] = frozenset({
 REJECTION_STATES: FrozenSet[PipelineState] = frozenset({
     PipelineState.REJECTED_NON_REPRODUCIBLE,
     PipelineState.REJECTED_PATCH_FAILED,
+    PipelineState.REJECTED_EMPTY_PATCH,
     PipelineState.REJECTED_REGRESSION,
     PipelineState.REJECTED_BLAST_RADIUS,
     PipelineState.REJECTED_ADMISSION,
@@ -73,6 +76,7 @@ VALID_TRANSITIONS: Dict[PipelineState, Set[PipelineState]] = {
     PipelineState.PATCH_PENDING: {
         PipelineState.PATCH_GREEN,
         PipelineState.REJECTED_PATCH_FAILED,
+        PipelineState.REJECTED_EMPTY_PATCH,
         PipelineState.ERROR,
     },
     PipelineState.PATCH_GREEN: {PipelineState.REGRESSION_PENDING, PipelineState.ERROR},
@@ -90,12 +94,14 @@ VALID_TRANSITIONS: Dict[PipelineState, Set[PipelineState]] = {
     PipelineState.BLAST_RADIUS_ACCEPTABLE: {PipelineState.ADMISSION_PENDING, PipelineState.ERROR},
     PipelineState.ADMISSION_PENDING: {
         PipelineState.ADMITTED,
+        PipelineState.REJECTED_EMPTY_PATCH,
         PipelineState.REJECTED_ADMISSION,
         PipelineState.ERROR,
     },
     PipelineState.ADMITTED: set(),
     PipelineState.REJECTED_NON_REPRODUCIBLE: set(),
     PipelineState.REJECTED_PATCH_FAILED: set(),
+    PipelineState.REJECTED_EMPTY_PATCH: set(),
     PipelineState.REJECTED_REGRESSION: set(),
     PipelineState.REJECTED_BLAST_RADIUS: set(),
     PipelineState.REJECTED_ADMISSION: set(),

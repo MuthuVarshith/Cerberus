@@ -1,4 +1,4 @@
-﻿"""
+"""
 Diff and Patch Utilities.
 Generates unified diffs, parses unified diffs, applies patches safely,
 validates format, and rolls back cleanly when a patch fails or causes regression.
@@ -9,7 +9,7 @@ import difflib
 import os
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from harness.docker_sandbox import Sandbox
 
 
@@ -112,3 +112,35 @@ class DiffUtils:
                 sandbox.exec(f"git checkout -- \"{f}\"")
         else:
             sandbox.exec("git checkout -- .")
+
+    @staticmethod
+    def get_workspace_diff(sandbox: Sandbox) -> str:
+        """Captures authoritative git diff from sandbox workspace."""
+        res = sandbox.exec("git diff")
+        return res.stdout if res.exit_code == 0 else ""
+
+    @staticmethod
+    def compute_diff_hash(diff_text: str) -> str:
+        """Computes deterministic SHA-256 hash of unified diff content."""
+        import hashlib
+        clean = diff_text.strip().encode("utf-8")
+        return hashlib.sha256(clean).hexdigest() if clean else ""
+
+    @staticmethod
+    def compute_diff_stats(diff_text: str) -> Dict[str, Any]:
+        """Calculates files changed, lines added, and lines deleted deterministically."""
+        lines_added = 0
+        lines_deleted = 0
+        for line in diff_text.splitlines():
+            if line.startswith("+") and not line.startswith("+++"):
+                lines_added += 1
+            elif line.startswith("-") and not line.startswith("---"):
+                lines_deleted += 1
+        files = DiffUtils.parse_targeted_files(diff_text)
+        return {
+            "files": files,
+            "lines_added": lines_added,
+            "lines_deleted": lines_deleted,
+            "total_lines": lines_added + lines_deleted,
+            "is_empty": (lines_added == 0 and lines_deleted == 0) or len(files) == 0,
+        }

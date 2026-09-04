@@ -5,6 +5,7 @@ and symbols, and feeds structured JSON failure feedback back into iterative retr
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass, field
@@ -50,6 +51,8 @@ class PatchLoopResult:
     history: List[PatchAttemptResult]
     total_lines_changed: int = 0
     final_changed_files: List[str] = field(default_factory=list)
+    diff_hash: str = ""
+    is_empty_diff: bool = False
 
 
 class PatchAgent:
@@ -187,6 +190,8 @@ class PatchAgent:
                         changed_files=targeted_files,
                     )
                 )
+                diff_h = hashlib.sha256(candidate_diff.strip().encode("utf-8")).hexdigest() if candidate_diff.strip() else ""
+                is_empty = (total_lines == 0) or not candidate_diff.strip() or len(targeted_files) == 0
                 return PatchLoopResult(
                     reached_green=True,
                     total_attempts=attempt,
@@ -194,6 +199,8 @@ class PatchAgent:
                     history=history,
                     total_lines_changed=total_lines,
                     final_changed_files=targeted_files,
+                    diff_hash=diff_h,
+                    is_empty_diff=is_empty,
                 )
             else:
                 # Target test FAILED -> parse structured failure and rollback

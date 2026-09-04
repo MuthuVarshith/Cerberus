@@ -1,4 +1,4 @@
-﻿"""
+"""
 Triage Agent with Pydantic Schema Validation.
 Parses issues, extracts error signatures and stack traces, detects project environment,
 prepares working branch, and triggers repository indexing.
@@ -49,8 +49,16 @@ class TriageAgent:
         error_matches = re.findall(r"\b([A-Z][a-zA-Z0-9]*(?:Error|Exception))\b", combined)
         error_signatures = list(dict.fromkeys(error_matches))
 
-        # 2. Extract referenced files (.py)
+        # 2. Extract referenced files (.py and modules)
         file_matches = re.findall(r"[\w\./\-]+\.py\b", combined)
+        # Also check for module tokens matching existing workspace files
+        tokens = re.findall(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b", combined)
+        for t in tokens:
+            candidate = f"{t}.py"
+            if os.path.exists(os.path.join(self.sandbox.workspace_dir, candidate)):
+                if candidate not in file_matches:
+                    file_matches.append(candidate)
+
         referenced_files = list(dict.fromkeys(file_matches))
 
         # 3. Extract stack traces

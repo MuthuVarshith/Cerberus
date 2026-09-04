@@ -135,3 +135,34 @@ def test_to_dict_contains_required_fields():
 def test_all_rejection_states_are_terminal():
     for rs in REJECTION_STATES:
         assert rs in TERMINAL_STATES, f"{rs} should be in TERMINAL_STATES"
+
+
+def test_rejected_empty_patch_state():
+    """Verify REJECTED_EMPTY_PATCH transition from ADMISSION_PENDING and terminal properties."""
+    sm = PipelineStateMachine()
+    path = [
+        PipelineState.TRIAGE_PENDING,
+        PipelineState.TRIAGED,
+        PipelineState.INDEXING,
+        PipelineState.INDEXED,
+        PipelineState.REPRODUCTION_PENDING,
+        PipelineState.REPRODUCED_RED,
+        PipelineState.LOCALIZATION_PENDING,
+        PipelineState.LOCALIZED,
+        PipelineState.PATCH_PENDING,
+        PipelineState.PATCH_GREEN,
+        PipelineState.REGRESSION_PENDING,
+        PipelineState.REGRESSION_CLEAN,
+        PipelineState.BLAST_RADIUS_PENDING,
+        PipelineState.BLAST_RADIUS_ACCEPTABLE,
+        PipelineState.ADMISSION_PENDING,
+        PipelineState.REJECTED_EMPTY_PATCH,
+    ]
+    for s in path:
+        sm.transition(s)
+    assert sm.state == PipelineState.REJECTED_EMPTY_PATCH
+    assert sm.is_terminal is True
+    assert sm.is_rejected is True
+    assert sm.is_admitted is False
+    with pytest.raises(RuntimeError):
+        sm.transition(PipelineState.ADMITTED)
