@@ -160,7 +160,13 @@ def generate_swe_bench_lite_25() -> List[RunRecord]:
 
 
 def run_swe_bench_lite_smoke() -> List[RunRecord]:
-    """Runs the 5-instance smoke test suite."""
+    """Runs the 5-instance smoke test suite.
+
+    The gate outcomes in these records are measured: each scenario really builds a
+    repo, runs the RED gate, applies a diff, and runs a regression suite in a
+    sandbox. Token counts and localization accuracy are not — no model is in the
+    loop — so those fields stay unset and the reporter labels them accordingly.
+    """
     records: List[RunRecord] = []
 
     # 1. Arithmetic bug
@@ -195,7 +201,7 @@ def run_swe_bench_lite_smoke() -> List[RunRecord]:
                 blast_radius_clean=regr_res.blast_radius.is_acceptable,
                 admitted_for_pr=decision.approved,
                 patch_attempts=patch_res.total_attempts,
-                total_tokens=1450,
+                total_tokens=0,  # no model in the loop; see tokens_measured
                 runtime_sec=regr_res.execution_time_sec + 2.0,
                 patch_size_lines=2,
             )
@@ -236,7 +242,7 @@ def run_swe_bench_lite_smoke() -> List[RunRecord]:
                 blast_radius_clean=regr_res.blast_radius.is_acceptable,
                 admitted_for_pr=decision.approved,
                 patch_attempts=patch_res.total_attempts,
-                total_tokens=2800,
+                total_tokens=0,  # no model in the loop; see tokens_measured
                 runtime_sec=regr_res.execution_time_sec + 3.5,
                 patch_size_lines=2,
             )
@@ -261,7 +267,7 @@ def run_swe_bench_lite_smoke() -> List[RunRecord]:
                 blast_radius_clean=True,
                 admitted_for_pr=False,
                 patch_attempts=0,
-                total_tokens=650,
+                total_tokens=0,  # no model in the loop; see tokens_measured
                 runtime_sec=1.1,
                 patch_size_lines=0,
                 rejection_reason="Blocked at RED Gate: Could not reproduce bug.",
@@ -302,7 +308,7 @@ def run_swe_bench_lite_smoke() -> List[RunRecord]:
                 blast_radius_clean=regr_res.blast_radius.is_acceptable,
                 admitted_for_pr=decision.approved,
                 patch_attempts=patch_res.total_attempts,
-                total_tokens=1900,
+                total_tokens=0,  # no model in the loop; see tokens_measured
                 runtime_sec=regr_res.execution_time_sec + 2.8,
                 patch_size_lines=4,
                 rejection_reason=decision.rejection_summary,
@@ -343,7 +349,7 @@ def run_swe_bench_lite_smoke() -> List[RunRecord]:
                 blast_radius_clean=regr_res.blast_radius.is_acceptable,
                 admitted_for_pr=decision.approved,
                 patch_attempts=patch_res.total_attempts,
-                total_tokens=1750,
+                total_tokens=0,  # no model in the loop; see tokens_measured
                 runtime_sec=regr_res.execution_time_sec + 2.1,
                 patch_size_lines=2,
                 rejection_reason=decision.rejection_summary,

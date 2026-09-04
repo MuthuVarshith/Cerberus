@@ -1,18 +1,18 @@
 # Cerberus — Verification-First Autonomous Software Repair Harness
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-54%20passed%20%2F%200%20failed-brightgreen.svg)](autonomous-pr-fixer/tests/)
+[![Tests](https://img.shields.io/badge/tests-103%20passed%20%2F%200%20failed-brightgreen.svg)](autonomous-pr-fixer/tests/)
 [![Architecture](https://img.shields.io/badge/architecture-verification--first-orange.svg)](#3-core-verification-first-idea)
 
 **Cerberus** is a research prototype of a *verification-first* software repair harness. Its thesis: a candidate patch should never reach a Pull Request because a model claims the bug is fixed — it should reach a PR only after passing a deterministic, programmatic conjunction of four gates: the issue was **proven reproducible** (Gate 1), the fix **introduces zero regressions** (Gate 2), the change **stays inside an authorized AST blast radius** (Gate 3), and the workspace yields a **real, non-empty, attributable diff** (Gate 4).
 
-The gate machinery, sandbox, state machine, retrieval layer, and audit trail are fully implemented and tested. The LLM patch-synthesis layer is **not** — see [Implementation Status](#1-implementation-status) before reading the evaluation section.
+The gate machinery, sandbox, state machine, retrieval layer, and audit trail are fully implemented and tested. Model-generated patching is implemented but **opt-in** — the default run path is a deterministic scripted repair, so the demo is reproducible offline. Read [Implementation Status](#1-implementation-status) before the evaluation section.
 
 ---
 
 ## 1. Implementation Status
 
-This project is a **gatekeeper prototype**, not an end-to-end autonomous agent. The table below is the honest split, with the code that backs each claim.
+This project is a **verification harness first and an agent second**. The table below is the honest split, with the code that backs each claim.
 
 | Subsystem | Status | Evidence |
 | :--- | :--- | :--- |
@@ -24,14 +24,15 @@ This project is a **gatekeeper prototype**, not an end-to-end autonomous agent. 
 | Iterative patch loop (retry, duplicate-diff abort, minimal-patch policy) | **Implemented** | [`agents/patch_agent.py`](autonomous-pr-fixer/agents/patch_agent.py) |
 | Regression suite + AST blast-radius analysis | **Implemented** | [`agents/regression_agent.py`](autonomous-pr-fixer/agents/regression_agent.py) |
 | `run.json` machine-readable audit artifact | **Implemented** | [`harness/run_artifact.py`](autonomous-pr-fixer/harness/run_artifact.py) |
-| HMAC-SHA256 webhook verification + idempotency | **Implemented** | [`github/webhook_handler.py`](autonomous-pr-fixer/github/webhook_handler.py) |
-| GitHub PR creation (branch, push, REST call) | **Implemented** | [`github/pr_publisher.py`](autonomous-pr-fixer/github/pr_publisher.py) |
-| **LLM patch generation** | **Not wired in** | No module calls a model. `litellm` is declared in `requirements.txt` but unused; `OPENAI_API_KEY` is read by `config.py` and never consumed. |
+| HMAC-SHA256 webhook verification (fail-closed) + idempotency | **Implemented** | [`github/webhook_handler.py`](autonomous-pr-fixer/github/webhook_handler.py) |
+| Webhook → pipeline dispatch | **Implemented** | `_run_repair_pipeline()` calls `run_pipeline`; dry-run by default, needs `CERBERUS_REPO_DIR` |
+| GitHub PR creation (branch, push, REST call), gated on admission | **Implemented** | [`github/pr_publisher.py`](autonomous-pr-fixer/github/pr_publisher.py) |
+| **LLM patch generation** | **Implemented, opt-in** | [`agents/llm_patch_generator.py`](autonomous-pr-fixer/agents/llm_patch_generator.py) via `litellm`. Enabled with `--use-llm` / `CERBERUS_USE_LLM=1`; needs `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. |
 | **LLM reproduction-test synthesis** | **Not wired in** | `ReproductionAgent.build_reproduction_prompt()` builds the prompt; nothing sends it. `run_reproduction_gate()` requires the test to be passed in as an argument. |
-| **`main.py` CLI repair** | **Scripted demo** | `main.py` writes a hard-coded corrected file (lines 189–207) instead of calling `PatchAgent.run_patch_loop`. It demonstrates the gates end-to-end on a known bug; it does not synthesize a fix. |
-| **Webhook → pipeline dispatch** | **Stub** | `_run_repair_pipeline()` logs the event and returns. Signature checking, dedup, and `BackgroundTasks` dispatch are real; the task body is not. |
+| **End-to-end run against a real provider** | **Unverified here** | No API key exists in this environment. The generator is tested through an injected `completion_fn` ([`tests/test_llm_patch_generator.py`](autonomous-pr-fixer/tests/test_llm_patch_generator.py), [`tests/test_main_llm_wiring.py`](autonomous-pr-fixer/tests/test_main_llm_wiring.py)) — real code path, fake transport. |
+| **`main.py` default path** | **Scripted demo** | Without `--use-llm`, stage 5 writes a known corrected file. It demonstrates the gates on a known bug; it does not synthesize a fix. |
 
-`PatchAgent`'s real retry loop *is* exercised — by [`evaluation/swe_bench_runner.py`](autonomous-pr-fixer/evaluation/swe_bench_runner.py) (live sandboxes, injected diffs) and [`tests/test_tdd_loop.py`](autonomous-pr-fixer/tests/test_tdd_loop.py).
+`PatchAgent`'s real retry loop is exercised three ways: by the LLM generator above, by [`evaluation/swe_bench_runner.py`](autonomous-pr-fixer/evaluation/swe_bench_runner.py) (live sandboxes, injected diffs), and by [`tests/test_tdd_loop.py`](autonomous-pr-fixer/tests/test_tdd_loop.py).
 
 ---
 
@@ -47,7 +48,7 @@ All three share a root cause: **the agent is its own judge.** Cerberus removes t
 
 ## 3. Core Verification-First Idea
 
-Authority to open a PR is moved out of the model and into a deterministic function. The model (once wired in) may only *propose*. The harness decides.
+Authority to open a PR is moved out of the model and into a deterministic function. The model may only *propose*. The harness decides.
 
 ```python
 # harness/admission_controller.py
@@ -116,7 +117,7 @@ Rejection is a **first-class, logged outcome**, not an exception path. `REJECTIO
    ├──────────────────────────────────────────────────────────┤
    │  PatchAgent            propose → apply → re-run test     │
    │                        rollback on fail, retry ≤ 5       │
-   │                        minimal-patch policy ≤ 150 lines  │
+   │                        minimal-patch policy ≤ 200 lines  │
    │                        abort on duplicate diff hash      │
    ├──────────────────────────────────────────────────────────┤
    │  RegressionAgent       full suite + AST blast radius     │
@@ -190,12 +191,15 @@ This is what lets Gate 3 reason about **symbols** rather than only line numbers:
 `github/webhook_handler.py` (FastAPI):
 
 - **HMAC-SHA256** signature verification of `X-Hub-Signature-256` using `hmac.compare_digest` — constant-time, no timing oracle.
+- **Fails closed.** An unset `GITHUB_WEBHOOK_SECRET` rejects every delivery with `403`. Without the secret the endpoint cannot distinguish GitHub from anyone else who found the URL, and this handler dispatches code-modifying work. The escape hatch is explicit and loud: `CERBERUS_ALLOW_UNSIGNED_WEBHOOKS=1` accepts unsigned deliveries and logs a warning on each one.
 - **Idempotency** via an `X-GitHub-Delivery` seen-set, so GitHub's at-least-once redelivery cannot trigger duplicate repairs.
-- **Async dispatch** through `BackgroundTasks` so the webhook returns promptly.
+- **Async dispatch** through `BackgroundTasks` so the webhook returns promptly. The task really runs the pipeline, but only when `CERBERUS_REPO_DIR` points at a usable checkout, and **in dry-run mode unless `CERBERUS_WEBHOOK_DRY_RUN=0`** — a webhook arriving at a fresh deployment should not open pull requests on someone's repository until that is switched on deliberately.
 
-> **Two known security gaps, both real:**
-> 1. `_verify_signature()` **fails open** — when `GITHUB_WEBHOOK_SECRET` is unset it returns `True`, accepting unsigned payloads. Acceptable for local development; unsafe if exposed. Set the secret, or change the default to fail closed, before deploying.
-> 2. `publish_pr()` writes `https://x-access-token:<token>@github.com/...` into the sandbox git remote and returns `push_res.stderr` verbatim on failure. Git can echo a remote URL in error output, so a push failure may surface the token in logs or in an API response.
+**Secret handling in `pr_publisher.py`:**
+
+- The remote stored in the sandbox's `.git/config` is the **clean** URL; the token is passed only to the single `git push` invocation, so it does not survive on disk next to the run artifacts.
+- Every git string that leaves the module passes through `redact_secrets()`, which strips the configured token, any `https://user:pass@` credential pair, and anything matching a GitHub token shape (`ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_`/`github_pat_`) — including tokens that arrived from somewhere other than the current config.
+- The commit message is written to a file and applied with `git commit -F`, never interpolated into a shell string. Branch names derived from issue titles go through `sanitize_ref()` first. `Sandbox.exec` uses `shell=True`, so webhook-supplied text must not be able to terminate one command and start another.
 
 ## 9. Evaluation
 
@@ -209,12 +213,15 @@ Read this before the numbers.
 | Avg patch attempts, avg patch size (± lines) | **Measured** from `PatchLoopResult` / `StructuralBlastRadius`. |
 | Safety-rejection counts | **Measured** — these are the actual terminal states reached. |
 | Avg runtime | **Measured**, plus a per-case constant offset. Varies run to run. |
-| **Token consumption** | **Stipulated.** Hardcoded per-case constants in `swe_bench_runner.py`. No model is called, so no tokens are spent. |
-| **Top-1 / Top-3 localization accuracy** | **Stipulated.** Hardcoded booleans, not compared against ground-truth patch files. |
-| **`lite-25` subset** | **Synthetic.** `generate_swe_bench_lite_25()` fabricates records; it does not download or run SWE-bench Lite. |
-| **Baseline & ablation tables** | **Hardcoded.** `baseline_runner.py` computes `rep_a/rep_b/rep_c` and then returns a literal string; `ablation_runner.py` computes nothing at all. |
+| Safe vs. unsafe admission split | **Measured.** `safe_resolution_rate` counts only PRs where the target passed *and* regressions were clean *and* the blast radius held; `unsafe_pr_rate` counts admitted PRs that failed any of those. Admission rate alone cannot distinguish the two, which is the whole comparison against an ungated agent. |
+| **Token consumption** | **Not measured in the offline suites, and labelled as such.** Records carry a `tokens_measured` flag; when it is false the reporter prints `not measured` instead of a number, and `build_evidence_report` prints `not measured (no model in the loop)` instead of inventing a plausible count. Real counts appear only on an `--use-llm` run, accumulated from provider `usage` in `GenerationUsage`. |
+| **Top-1 / Top-3 localization accuracy** | **Not measured**, same mechanism (`localization_measured`). The booleans in the scenario records were never compared against ground-truth patch files, so the reporter refuses to print them as percentages. |
+| **`lite-25` subset** | **Synthetic.** `generate_swe_bench_lite_25()` fabricates records; it does not download or run SWE-bench Lite. Its title says so. |
+| **Baseline & ablation tables** | **Derived from stipulated inputs.** Both are now computed from their scenario records rather than hardcoded — `evaluate_config()` in `ablation_runner.py`, interpolated `MetricsReporter` output in `baseline_runner.py`, both pinned by [`tests/test_evaluation_honesty.py`](autonomous-pr-fixer/tests/test_evaluation_honesty.py). The *inputs* are still authored bug profiles, not measured runs, and the rendered tables state that. |
 
-So: the **gate behaviour** is empirically demonstrated. The **efficiency and localization figures are illustrative placeholders**, and the comparative tables are not evidence of anything.
+So: the **gate behaviour** is empirically demonstrated. Efficiency and localization figures are **absent rather than fabricated**, and the comparative tables demonstrate that the gate logic behaves as claimed on the profiles fed to it — not that it behaves that way on SWE-bench.
+
+> An earlier revision of `baseline_runner.py` wrote its percentages out by hand, and four of them disagreed with the records they claimed to summarise. Interpolating from the computed reports both corrected them and made that class of error impossible.
 
 ### 9.2 Live smoke subset (5 injected-bug cases, reproducible)
 
@@ -231,6 +238,8 @@ cd autonomous-pr-fixer && python evaluation/swe_bench_runner.py --subset smoke
 | Avg patch attempts | **1.25** |
 | Avg patch size | **+2.5 lines** |
 | Avg runtime | **~2.6–2.9 s** per case |
+| Top-1 / Top-3 localization | `not measured` |
+| Tokens per issue | `not measured` |
 
 Terminal rejection breakdown: **1** not reproducible, **1** regression detected, **1** blast-radius violation. Three of the five cases were stopped by a gate — which is the point of the exercise. A 40% admission rate on deliberately adversarial cases is the intended behaviour, not a failure.
 
@@ -250,7 +259,7 @@ Activate the environment — `source .venv/bin/activate` on macOS/Linux, `.venv\
 pip install -r requirements.txt
 ```
 
-Run the test suite (54 tests, no network or Docker required):
+Run the test suite (103 tests, no network, no Docker, and no API key required):
 
 ```bash
 python -m pytest tests/ -q
@@ -262,7 +271,15 @@ Run the gate demonstration:
 python main.py --issue 1 --dry-run
 ```
 
-> `main.py` is a **scripted demonstration**. It exercises triage → localization → RED gate → regression → blast radius → admission → `run.json` on a known bug, but the corrected file it writes is hard-coded (`main.py:189–207`). It shows that the gates work; it does not show a model repairing anything. See §1.
+> The default `main.py` path is a **scripted demonstration**. It exercises triage → localization → RED gate → regression → blast radius → admission → `run.json` on a known bug, but stage 5 writes a known corrected file rather than synthesizing one. It shows that the gates work. The diff hash is stable at `948c1f1fcbec` across runs, which is what makes it useful as a regression check on the harness itself.
+
+Run the same pipeline with a model generating the patch:
+
+```bash
+python main.py --issue 1 --dry-run --use-llm
+```
+
+This needs `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. Stage 5 then builds an [`LLMPatchGenerator`](autonomous-pr-fixer/agents/llm_patch_generator.py) over the localization boundary and hands it to the real `PatchAgent.run_patch_loop`: the model proposes a unified diff, `git apply` applies it, the reproduction test judges it, and a failure is fed back as the verifier's own output on the next attempt. Every gate downstream is unchanged — the model has no more authority than the scripted path had. Without a key the run prints a warning and falls back to the scripted repair rather than failing.
 
 ### Portability
 
@@ -275,12 +292,18 @@ Copy `.env.example` to `.env`. Recognized keys:
 | Key | Effect |
 | :--- | :--- |
 | `GITHUB_TOKEN` | PAT used by `publish_pr`. Omit for dry-run. |
-| `GITHUB_WEBHOOK_SECRET` | Enables HMAC verification. **Without it, verification fails open.** |
+| `GITHUB_WEBHOOK_SECRET` | HMAC secret. **Required** — without it every delivery is rejected `403`. |
 | `GITHUB_REPO_SLUG` | `owner/repo` target for PR creation. |
+| `GITHUB_BASE_BRANCH` | Base branch for the PR. Defaults to `main`; set it if your default branch is `master`, otherwise the API rejects the PR after the push already succeeded. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Provider credential for `--use-llm`. Either one is enough; the model default follows whichever is present. |
+| `CERBERUS_USE_LLM` | `1` to generate patches with a model without passing `--use-llm`. Off by default. |
+| `CERBERUS_MODEL` | litellm model id, e.g. `anthropic/claude-sonnet-5` or `openai/gpt-4o`. Overrides the key-based default. |
+| `CERBERUS_REPO_DIR` | Local checkout the webhook-triggered pipeline operates on. Unset ⇒ the dispatch logs `repair_pipeline_skipped` and does nothing. |
+| `CERBERUS_WEBHOOK_DRY_RUN` | `0` to let webhook-triggered runs actually push and open PRs. **Defaults to dry-run.** |
+| `CERBERUS_ALLOW_UNSIGNED_WEBHOOKS` | `1` to accept unsigned deliveries. Development only; logs a warning per delivery. |
+| `PATCH_MAX_ATTEMPTS`, `PATCH_MAX_LINES_CHANGED` | Applied. `PatchAgent` reads them for anything a caller did not pass explicitly (default 5 / 200). |
 | `SANDBOX_TIMEOUT_SECONDS`, `SANDBOX_NETWORK_DISABLED` | Applied by the sandbox. |
 | `LOG_LEVEL`, `RUN_ARTIFACTS_DIR` | Applied. |
-| `PATCH_MAX_ATTEMPTS`, `PATCH_MAX_LINES_CHANGED` | **Parsed but never applied** — `PatchAgent` uses its own defaults (5 / 150). |
-| `OPENAI_API_KEY` | **Read and never used.** No model is invoked. |
 
 **Never commit `.env`.** It holds a live token.
 
@@ -312,7 +335,7 @@ Every run — admitted or rejected — writes a machine-readable artifact to `ar
 
 Artifacts under `artifacts/` with `schema_version: 1.0` predate Gate 4 and record only three gates.
 
-`PRPublisher.build_evidence_report()` renders a full human-readable verification report — reproduction trace, iteration count, suite counts, blast radius, unified diff. It is **not reachable from the CLI path**: `main.py:309` passes `pr_body=""`. Wire it up before relying on PR bodies for review evidence.
+`PRPublisher.build_evidence_report()` renders a full human-readable verification report — reproduction trace, iteration count, suite counts, blast radius, unified diff, token consumption. Every admitted run uses it as the PR body. Rejected runs never reach `publish_pr` at all; that gating is pinned by [`tests/test_publish_gating.py`](autonomous-pr-fixer/tests/test_publish_gating.py), because the claim "a PR appears only when all four gates hold" is only true if the publish call actually consults the decision.
 
 ---
 
@@ -324,16 +347,17 @@ intelligent-noether/
 ├── .gitignore
 ├── .github/workflows/ci.yml         tests on ubuntu + windows, secret audit
 └── autonomous-pr-fixer/
-    ├── main.py                      scripted 8-stage demo
+    ├── main.py                      8-stage pipeline; scripted by default, --use-llm for a model
     ├── requirements.txt
     ├── .env.example
-    ├── agents/                      triage, localization, reproduction, patch, regression
+    ├── agents/                      triage, localization, reproduction, patch, regression,
+    │                                llm_patch_generator
     ├── harness/                     admission_controller, pipeline_state, docker_sandbox,
     │                                diff_utils, run_artifact, py_interpreter, config
     ├── github/                      webhook_handler, pr_publisher
     ├── retrieval/                   AST index + lexical search
     ├── evaluation/                  swe_bench, baseline, ablation, metrics_reporter
-    ├── tests/                       54 tests
+    ├── tests/                       103 tests
     └── artifacts/                   run.json audit trail (gitignored)
 ```
 
@@ -341,15 +365,13 @@ intelligent-noether/
 
 Ordered by what most limits the project today.
 
-1. **No model in the loop.** Patch synthesis and reproduction-test synthesis are the two places a model belongs, and neither is connected. `PatchAgent.run_patch_loop` already accepts a proposal callback, so this is an integration task, not a redesign.
-2. **Webhook signature verification fails open** when the secret is unset (§8).
-3. **Token leakage on push failure** — `publish_pr` returns raw git stderr (§8).
-4. **Evaluation numbers are partly stipulated** (§9.1). Real SWE-bench Lite integration, real token accounting, and ground-truth localization scoring are all outstanding.
-5. **Diff-source inconsistency.** `diff_utils.get_workspace_diff` runs plain `git diff` (worktree vs. index) while `RegressionAgent` uses `git diff --name-only HEAD` / `--numstat HEAD`. These agree only while nothing is staged. Anything that stages files will make Gate 3 and Gate 4 read different pictures of the same workspace.
-6. **Patch config is inert.** `PATCH_MAX_ATTEMPTS` / `PATCH_MAX_LINES_CHANGED` are parsed and discarded.
-7. **`build_evidence_report` is unreachable** from the CLI (§11).
-8. **Single-language.** AST analysis is Python-only. The retrieval layer would need per-language grammars to generalize.
-9. **Docker mode is untested.** The container flags in §7 are written but have never executed here; every measurement in §9 came from the process-fallback sandbox.
+1. **No model has actually run here.** The LLM patch path is implemented and tested through an injected transport, but this environment has no provider credential, so it has never made a real API call. Prompt quality, retry effectiveness, and cost per fix are all unmeasured.
+2. **Reproduction-test synthesis is still scripted.** This matters more than patch synthesis: the reproduction test *is* the specification the whole harness enforces. `build_reproduction_prompt()` exists; nothing sends it. Until it is wired in, the RED gate proves that a supplied test fails, not that the harness understood the issue.
+3. **Evaluation is not SWE-bench.** The `lite-25` subset is synthetic, and the baseline/ablation tables are computed from authored bug profiles. Real SWE-bench Lite integration and ground-truth localization scoring are outstanding; the honesty flags currently prevent the missing measurements from being *presented*, which is not the same as having them.
+4. **Docker mode is untested.** The container flags in §7 have never executed here — no Docker daemon on this machine. Every measurement came from the process-fallback sandbox, which isolates the working tree but does not contain the code it runs.
+5. **Single-language.** AST analysis is Python-only. The retrieval layer would need per-language grammars to generalize.
+6. **Webhook idempotency is in-process.** The `X-GitHub-Delivery` seen-set lives in memory, so a restart or a second worker forgets it. Fine for one process; not for a horizontally scaled deployment.
+7. **`main.py`'s stage 1–4 shortcuts.** Triage, the reproduction test, and the localization target are chosen by branching on issue text for two known scenarios. The gates downstream are general; the demo's front end is not.
 
 ---
 
@@ -361,7 +383,9 @@ Not an agent that fixes bugs. **A verification harness that refuses to let unver
 - Reproduction is a **hard precondition**. A bug that cannot be made to fail on demand is not a bug the harness will attempt.
 - Gate 4 exists specifically to catch the empty patch that satisfies every other gate.
 - Rejection is a first-class outcome with a named terminal state, not a swallowed exception.
+- Publication is gated on the decision, not reported alongside it: a rejected patch never reaches `git push`.
+- Unmeasured quantities are labelled `not measured` rather than filled with a plausible constant, because in an evidence artifact a fabricated number is indistinguishable from a real one.
 - Every run leaves a machine-readable artifact, whether it succeeded or not.
 
-The parts that remain unbuilt are the parts a model does. The parts that decide whether to trust a model are built and tested.
+A model can now propose the patch. It still cannot approve one.
 

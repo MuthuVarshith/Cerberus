@@ -33,6 +33,12 @@ class RunRecord:
     runtime_sec: float
     patch_size_lines: int
     rejection_reason: Optional[str] = None
+    #: Whether total_tokens came from a real model call. False means no model ran,
+    #: so the reporter must not present an average as a measurement.
+    tokens_measured: bool = False
+    #: Whether top_1_correct/top_3_correct were checked against a known fault
+    #: location rather than asserted by the scenario author.
+    localization_measured: bool = False
 
 
 class MetricsReporter:
@@ -75,6 +81,15 @@ class MetricsReporter:
         rejections = sum(1 for r in self.records if not r.admitted_for_pr)
         rejection_rate = (rejections / n) * 100.0
 
+        # A PR is only "safe" if what it claims held on every axis. Splitting the
+        # admitted set this way is the whole comparison against an ungated agent:
+        # both may admit the same number of PRs, but only one admits broken ones.
+        def _is_safe(r: RunRecord) -> bool:
+            return r.target_passed and r.regression_clean and r.blast_radius_clean
+
+        safe_admitted = sum(1 for r in self.records if r.admitted_for_pr and _is_safe(r))
+        unsafe_admitted = sum(1 for r in self.records if r.admitted_for_pr and not _is_safe(r))
+
         # Safety Metrics
         reg_rejections = sum(
             1 for r in self.records if r.target_passed and not r.regression_clean
@@ -97,6 +112,13 @@ class MetricsReporter:
             "avg_runtime_sec": round(avg_runtime, 2),
             "avg_patch_size_lines": round(avg_patch_size, 1),
             "rejection_rate": round(rejection_rate, 1),
+            "rejections": rejections,
+            "safe_resolution_rate": round((safe_admitted / n) * 100.0, 1),
+            "unsafe_pr_rate": round((unsafe_admitted / n) * 100.0, 1),
+            "safe_admitted": safe_admitted,
+            "unsafe_admitted": unsafe_admitted,
+            "tokens_measured": any(r.tokens_measured for r in self.records),
+            "localization_measured": any(r.localization_measured for r in self.records),
             "reg_rejections": reg_rejections,
             "blast_rejections": blast_rejections,
             "non_repro_rejections": non_repro_rejections,
@@ -104,6 +126,12 @@ class MetricsReporter:
 
     def format_markdown_table(self, title: str = "Empirical Evaluation Benchmark") -> str:
         m = self.compute_metrics()
+        # Unmeasured quantities are labelled, not averaged into a number that
+        # would be indistinguishable from the gate outcomes above them.
+        unmeasured = "`not measured`"
+        loc_1 = f"`{m['top_1_acc']}%`" if m["localization_measured"] else unmeasured
+        loc_3 = f"`{m['top_3_acc']}%`" if m["localization_measured"] else unmeasured
+        tokens = f"`{m['avg_tokens']}`" if m["tokens_measured"] else unmeasured
         return f"""### {title}
 | Category | Metric | Measurement | Target / Standard |
 | :--- | :--- | :---: | :---: |
@@ -111,10 +139,10 @@ class MetricsReporter:
 | **Primary** | **Reproduction Success Rate (RED Gate)** | **`{m['reproduction_rate']}%`** | > 80% |
 | **Primary** | **Regression-Free Rate** | **`{m['regression_free_rate']}%`** | > 85% |
 | **Primary** | **PR Admission Rate** | **`{m['pr_admission_rate']}%`** | Regulated |
-| **Secondary** | **Top-1 Localization Accuracy** | `{m['top_1_acc']}%` | > 65% |
-| **Secondary** | **Top-3 Localization Accuracy** | `{m['top_3_acc']}%` | > 85% |
+| **Secondary** | **Top-1 Localization Accuracy** | {loc_1} | > 65% |
+| **Secondary** | **Top-3 Localization Accuracy** | {loc_3} | > 85% |
 | **Secondary** | **Average Patch Attempts** | `{m['avg_attempts']}` | < 2.5 |
-| **Secondary** | **Average Tokens per Issue** | `{m['avg_tokens']}` | Efficient ACI |
+| **Secondary** | **Average Tokens per Issue** | {tokens} | Efficient ACI |
 | **Secondary** | **Average Runtime** | `{m['avg_runtime_sec']}s` | Fast turnaround |
 | **Secondary** | **Average Patch Size** | `+{m['avg_patch_size_lines']} lines` | Minimal diffs |
 | **Safety** | **Regression-Induced Rejections** | **`{m['reg_rejections']}`** | Prevented breaks |

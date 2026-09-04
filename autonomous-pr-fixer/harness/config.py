@@ -50,6 +50,25 @@ class HarnessConfig:
         return bool(self.openai_api_key)
 
 
+def _env_int(key: str, default: int) -> int:
+    """Read an int from the environment, falling back on an unparseable value."""
+    try:
+        return int(os.environ.get(key, str(default)))
+    except ValueError:
+        logger.warning("Invalid value for %s, using default %s", key, default)
+        return default
+
+
+def patch_policy_defaults() -> tuple[int, int]:
+    """Return (max_attempts, max_lines_changed) for the patch loop.
+
+    Separate from `load_config` so an agent can honour PATCH_MAX_ATTEMPTS and
+    PATCH_MAX_LINES_CHANGED without triggering the full validation-and-logging
+    path on every construction.
+    """
+    return _env_int("PATCH_MAX_ATTEMPTS", 5), _env_int("PATCH_MAX_LINES_CHANGED", 200)
+
+
 def load_config(require_github: bool = False, require_llm: bool = False) -> HarnessConfig:
     """
     Load configuration from environment variables.
@@ -63,11 +82,7 @@ def load_config(require_github: bool = False, require_llm: bool = False) -> Harn
         A validated HarnessConfig instance.
     """
     def _int(key: str, default: int) -> int:
-        try:
-            return int(os.environ.get(key, str(default)))
-        except ValueError:
-            logger.warning("Invalid value for %s, using default %s", key, default)
-            return default
+        return _env_int(key, default)
 
     def _bool(key: str, default: bool) -> bool:
         raw = os.environ.get(key, str(default)).lower()

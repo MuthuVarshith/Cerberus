@@ -74,24 +74,37 @@ def run_baseline_comparison() -> str:
     rep_a = MetricsReporter(records_baseline_a).compute_metrics()
     rep_b = MetricsReporter(records_baseline_b).compute_metrics()
     rep_c = MetricsReporter(records_system_c).compute_metrics()
+    n = rep_c["total_instances"]
 
+    # The localization booleans in these records were authored, not checked against
+    # a ground-truth patch file, so this row cannot claim AST retrieval localizes
+    # better than a baseline. `MetricsReporter` refuses to print them as
+    # percentages; this table has to refuse for the same reason.
+    def _loc(rep: Dict[str, Any]) -> str:
+        if rep["localization_measured"]:
+            return f"{rep['top_1_acc']}% / {rep['top_3_acc']}%"
+        return "`not measured`"
+
+    # Every cell below is derived from the records above. An earlier version wrote
+    # the percentages out by hand and three of them disagreed with the records they
+    # claimed to summarise; interpolation makes that class of error impossible.
     table = f"""### 🏆 Multi-Architecture Comparative Baseline Benchmark
-> **Evaluation Status:** *Simulated Scenario Archetypes* (Illustrates comparative gatekeeper mechanics on controlled failure modes; not unconstrained live LLM generation).
+> **Evaluation Status:** *Simulated Scenario Archetypes* (Illustrates comparative gatekeeper mechanics on controlled failure modes; not unconstrained live LLM generation). Every figure in this table is computed from the {n} scenario records in `evaluation/baseline_runner.py`, which are stipulated inputs rather than measured runs.
 
 | Metric | Baseline A (One-Shot LLM) | Baseline B (mini-swe-agent) | System C (Cerberus Harness) |
 | :--- | :---: | :---: | :---: |
 | **Pipeline Type** | Unchecked 1-Shot | Free-form Loop | **Constrained Multi-Agent** |
-| **Reproduction Gate (RED)** | ❌ None | ❌ None | **✅ 80.0% Enforced** |
-| **True Resolution Rate (Safe PRs)** | 20.0% | 40.0% | **40.0% (100% Verifiable)** |
-| **Unsafe PRs Merged (Regressions/Leaks)** | ⚠️ 60.0% (3/5) | ⚠️ 60.0% (3/5) | **🛡️ 0.0% (0/5 Blocked)** |
-| **Regression-Free Rate** | 40.0% | 60.0% | **80.0%** |
-| **Top-1 / Top-3 Localization** | 60.0% / 60.0% | 80.0% / 80.0% | **80.0% / 80.0% (AST + RAG)** |
-| **Average Patch Size** | +15.0 lines | +13.0 lines | **+10.0 lines (Minimal Diffs)** |
-| **Admission Rejections (Audit)** | 0 | 0 | **3 (Active Gatekeeper)** |
+| **Reproduction Gate (RED)** | {rep_a['reproduction_rate']}% (no gate) | {rep_b['reproduction_rate']}% (no gate) | **✅ {rep_c['reproduction_rate']}% Enforced** |
+| **True Resolution Rate (Safe PRs)** | {rep_a['safe_resolution_rate']}% | {rep_b['safe_resolution_rate']}% | **{rep_c['safe_resolution_rate']}%** |
+| **Unsafe PRs Merged (Regressions/Leaks)** | ⚠️ {rep_a['unsafe_pr_rate']}% ({rep_a['unsafe_admitted']}/{n}) | ⚠️ {rep_b['unsafe_pr_rate']}% ({rep_b['unsafe_admitted']}/{n}) | **🛡️ {rep_c['unsafe_pr_rate']}% ({rep_c['unsafe_admitted']}/{n})** |
+| **Regression-Free Rate** | {rep_a['regression_free_rate']}% | {rep_b['regression_free_rate']}% | **{rep_c['regression_free_rate']}%** |
+| **Top-1 / Top-3 Localization** | {_loc(rep_a)} | {_loc(rep_b)} | **{_loc(rep_c)}** |
+| **Average Patch Size** | +{rep_a['avg_patch_size_lines']} lines | +{rep_b['avg_patch_size_lines']} lines | **+{rep_c['avg_patch_size_lines']} lines (Minimal Diffs)** |
+| **Admission Rejections (Audit)** | {rep_a['rejections']} | {rep_b['rejections']} | **{rep_c['rejections']} (Active Gatekeeper)** |
 
-#### 🔬 Key Finding for Research & Hiring:
-- **Baselines A & B blindly open PRs that break regression tests or modify unintended files.**
-- **Cerberus (Verification-First) acts as an authoritative firewall:** it achieves the same or better resolution on true bugs while maintaining a **0% silent corruption rate** by rejecting non-reproduced, regression-inducing, or scope-leaking patches.
+#### 🔬 Key Finding:
+- **Baselines A & B open PRs that break regression tests or modify unintended files** ({rep_a['unsafe_admitted']} and {rep_b['unsafe_admitted']} of {n} respectively).
+- **Cerberus (Verification-First) acts as an authoritative firewall:** it reaches the same safe-resolution rate as Baseline B ({rep_c['safe_resolution_rate']}% vs {rep_b['safe_resolution_rate']}%) while admitting {rep_c['unsafe_admitted']} unsafe patches, by rejecting non-reproduced, regression-inducing, and scope-leaking ones.
 """
     return table
 
