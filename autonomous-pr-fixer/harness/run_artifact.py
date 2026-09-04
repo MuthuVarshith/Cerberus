@@ -27,9 +27,20 @@ def write_run_artifact(
     base_commit_sha: str = "unknown",
     model_config: Optional[Dict[str, Any]] = None,
     artifacts_dir: str = "artifacts",
+    execution_mode: str = "local",
+    patch_changed: bool = False,
+    diff_hash: str = "",
+    diff_files: Optional[list] = None,
+    diff_lines_added: int = 0,
+    diff_lines_deleted: int = 0,
+    patch_verified_against_test: bool = False,
+    github_integration_enabled: bool = False,
+    pr_created: bool = False,
+    pr_url: Optional[str] = None,
+    admission_rejection_reason: Optional[str] = None,
 ) -> str:
     """
-    Write a run.json artifact for this repair attempt.
+    Write a run.json artifact for this repair attempt conforming to Section 7.
 
     Returns the absolute path to the written file.
     """
@@ -38,17 +49,30 @@ def write_run_artifact(
 
     artifact: Dict[str, Any] = {
         # Identification
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "run_id": run_id,
         "issue": {"number": issue_number, "title": issue_title},
+        "execution_mode": execution_mode,
 
         # Pipeline trace
         "pipeline_state_history": pipeline_state_history,
         "admission_decision": admission_decision,
+        "admission_rejection_reason": admission_rejection_reason or admission_decision.get("rejection_state", ""),
 
-        # Repair metrics
+        # Repair metrics & diff verification
         "patch_attempts": patch_attempts,
         "reached_green": reached_green,
+        "patch_changed": patch_changed or admission_decision.get("patch_changed", False),
+        "diff_hash": diff_hash or admission_decision.get("diff_hash", ""),
+        "diff_files": diff_files or [],
+        "diff_lines_added": diff_lines_added,
+        "diff_lines_deleted": diff_lines_deleted,
+        "patch_verified_against_test": patch_verified_against_test or reached_green,
+
+        # GitHub Publishing Info (no fake/simulated URLs)
+        "github_integration_enabled": github_integration_enabled,
+        "pr_created": pr_created,
+        "pr_url": pr_url,
 
         # Reproducibility fields
         "reproducibility": {

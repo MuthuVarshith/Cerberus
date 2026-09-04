@@ -1,5 +1,5 @@
 """
-Configuration loader and startup validator for the Autonomous Repair Harness.
+Configuration loader and startup validator for Cerberus Autonomous Software Repair Harness.
 
 Reads environment variables and fails fast (raises ConfigError) if required
 secrets are missing when live GitHub integration is requested.

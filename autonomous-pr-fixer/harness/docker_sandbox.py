@@ -131,6 +131,9 @@ class Sandbox:
                     "--memory=2g",
                     "--cpus=2.0",
                     "--pids-limit=100",
+                    "--user",
+                    "1000:1000",
+                    "--security-opt=no-new-privileges:true",
                     "-v",
                     f"{os.path.abspath(self.workspace_dir)}:/workspace",
                     "-w",
@@ -226,14 +229,14 @@ class Sandbox:
     def write_file(self, rel_path: str, content: str) -> None:
         target = self._safe_resolve(rel_path)
         os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "w", encoding="utf-8", newline="\n") as f:
+        with open(target, "w", encoding="utf-8", newline="") as f:
             f.write(content)
 
     def read_file(self, rel_path: str) -> str:
         target = self._safe_resolve(rel_path)
         if not os.path.exists(target):
             raise FileNotFoundError(f"{rel_path} does not exist in sandbox.")
-        with open(target, "r", encoding="utf-8", errors="replace") as f:
+        with open(target, "r", encoding="utf-8", newline="", errors="replace") as f:
             return f.read()
 
     def destroy(self) -> None:

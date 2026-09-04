@@ -1,4 +1,4 @@
-﻿"""
+"""
 GitHub PR Publisher.
 Formats comprehensive machine- and human-readable verification reports,
 saves complete JSON audit trail artifacts, and publishes pull requests only upon Admission Controller approval.
@@ -42,7 +42,7 @@ class PRPublisher:
         radius = regression_res.blast_radius
         tokens = token_usage or {"prompt_tokens": 1250, "completion_tokens": 320, "total_tokens": 1570}
 
-        body = f"""## 🤖 Verification-First Autonomous Repair: Issue #{issue_number}
+        body = f"""## 🤖 Cerberus Autonomous Repair: Issue #{issue_number}
 **Title:** `{issue_title}`
 **Branch:** `{branch_name}`
 
@@ -50,7 +50,7 @@ class PRPublisher:
 
 ### 🛡️ Patch Admission Controller: **{'✅ APPROVED' if decision.approved else '❌ REJECTED'}**
 
-> This Pull Request was machine-verified by the **Verification-First Autonomous Software Repair Harness**.
+> This Pull Request was machine-verified by **Cerberus: Verification-First Autonomous Software Repair Harness**.
 > Unlike standard autonomous coding agents that open PRs based on unverified LLM generation, this patch satisfied all 3 mandatory verification gates.
 
 #### Verification Breakdown:
@@ -103,7 +103,7 @@ A minimal reproduction test was synthesized and verified to **FAIL** on the unpa
 - **Estimated Token Consumption:** `{tokens.get('total_tokens', 0)} tokens`
 - **Execution Time:** `{regression_res.execution_time_sec}s`
 
-*Generated autonomously by Verification-First Software Repair Harness*
+*Generated autonomously by Cerberus: Verification-First Software Repair Harness*
 """
         return body
 
@@ -167,19 +167,46 @@ A minimal reproduction test was synthesized and verified to **FAIL** on the unpa
         pr_title = f"fix(autobot): resolve issue #{issue_number} - {issue_title[:50]}"
 
         if dry_run or not self.token:
+            if dry_run:
+                display_msg = "PR: NOT CREATED (dry-run mode)"
+                status_key = "dry_run_success"
+            else:
+                display_msg = "PR ADMITTED LOCALLY — GITHUB PUBLISHING DISABLED"
+                status_key = "local_success"
+
             return {
-                "status": "dry_run_success",
+                "status": status_key,
                 "pr_title": pr_title,
                 "branch": branch_name,
                 "repo": repo_slug,
-                "pr_url": f"https://github.com/{repo_slug}/pull/simulated-pr-{issue_number}",
+                "pr_url": None,
+                "display_url": display_msg,
+                "published": False,
                 "body": pr_body,
             }
 
+        auth_url = f"https://x-access-token:{self.token}@github.com/{repo_slug}.git"
+        
+        # Try to set URL if origin exists, otherwise add it
+        remote_check = self.sandbox.exec("git remote")
+        if "origin" in remote_check.stdout:
+            self.sandbox.exec(f"git remote set-url origin {auth_url}")
+        else:
+            self.sandbox.exec(f"git remote add origin {auth_url}")
+            
         self.sandbox.exec(f"git checkout -b {branch_name}")
         self.sandbox.exec("git add -A")
         self.sandbox.exec(f"git commit -m \"{pr_title}\"")
-        self.sandbox.exec(f"git push origin {branch_name}")
+        
+        push_res = self.sandbox.exec(f"git push -u origin {branch_name}")
+        if push_res.exit_code != 0:
+            return {
+                "status": "error",
+                "error": f"Git push failed: {push_res.stderr}",
+                "pr_title": pr_title,
+                "branch": branch_name,
+                "body": pr_body,
+            }
 
         url = f"https://api.github.com/repos/{repo_slug}/pulls"
         headers = {

@@ -3,7 +3,7 @@ Baseline Comparison Runner.
 Evaluates three architectures on representative SWE-bench instances:
 - Baseline A: One-Shot LLM Patch Generation (Issue -> Direct Patch -> Commit)
 - Baseline B: Standard mini-swe-agent (Interactive Shell Tool Loop without Verification Gates)
-- System C: Verification-First Autonomous Software Repair Harness (Full Verification Pipeline)
+- System C: Cerberus: Verification-First Autonomous Software Repair Harness (Full Verification Pipeline)
 """
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ def run_baseline_comparison() -> str:
         RunRecord("inst_5", reproduced=False, top_1_correct=True, top_3_correct=True, target_passed=True, regression_clean=True, blast_radius_clean=False, admitted_for_pr=True, patch_attempts=1, total_tokens=2200, runtime_sec=4.0, patch_size_lines=35), # Leaked!
     ]
 
-    # System C: Verification-First Autonomous Software Repair Harness
+    # System C: Cerberus: Verification-First Autonomous Software Repair Harness
     records_system_c = [
         RunRecord("inst_1", reproduced=True, top_1_correct=True, top_3_correct=True, target_passed=True, regression_clean=True, blast_radius_clean=True, admitted_for_pr=True, patch_attempts=1, total_tokens=2100, runtime_sec=3.8, patch_size_lines=4),
         RunRecord("inst_2", reproduced=True, top_1_correct=True, top_3_correct=True, target_passed=True, regression_clean=True, blast_radius_clean=True, admitted_for_pr=True, patch_attempts=2, total_tokens=3500, runtime_sec=6.2, patch_size_lines=5),
@@ -78,7 +78,7 @@ def run_baseline_comparison() -> str:
     table = f"""### 🏆 Multi-Architecture Comparative Baseline Benchmark
 > **Evaluation Status:** *Simulated Scenario Archetypes* (Illustrates comparative gatekeeper mechanics on controlled failure modes; not unconstrained live LLM generation).
 
-| Metric | Baseline A (One-Shot LLM) | Baseline B (mini-swe-agent) | System C (Verification-First Harness) |
+| Metric | Baseline A (One-Shot LLM) | Baseline B (mini-swe-agent) | System C (Cerberus Harness) |
 | :--- | :---: | :---: | :---: |
 | **Pipeline Type** | Unchecked 1-Shot | Free-form Loop | **Constrained Multi-Agent** |
 | **Reproduction Gate (RED)** | ❌ None | ❌ None | **✅ 80.0% Enforced** |
@@ -91,7 +91,7 @@ def run_baseline_comparison() -> str:
 
 #### 🔬 Key Finding for Research & Hiring:
 - **Baselines A & B blindly open PRs that break regression tests or modify unintended files.**
-- **System C (Verification-First) acts as an authoritative firewall:** it achieves the same or better resolution on true bugs while maintaining a **0% silent corruption rate** by rejecting non-reproduced, regression-inducing, or scope-leaking patches.
+- **Cerberus (Verification-First) acts as an authoritative firewall:** it achieves the same or better resolution on true bugs while maintaining a **0% silent corruption rate** by rejecting non-reproduced, regression-inducing, or scope-leaking patches.
 """
     return table
 
