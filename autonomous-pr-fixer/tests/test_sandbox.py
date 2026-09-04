@@ -27,7 +27,7 @@ def test_sandbox_lifecycle_and_exec():
 def test_sandbox_timeout_safety():
     with Sandbox(timeout_sec=2) as sb:
         # Run a sleep longer than timeout
-        res = sb.exec("py -3.13 -c \"import time; time.sleep(10)\"", timeout=2)
+        res = sb.exec(f"{sb.python_cmd} -c \"import time; time.sleep(10)\"", timeout=2)
         assert res.timed_out or res.exit_code in (124, 1)
 
 
@@ -55,7 +55,7 @@ def test_aci_tools():
         assert "sample.py:2" in grep_res
 
         # 6. Run command
-        run_res = aci.run_cmd("py -3.13 -c \"import sample; print(sample.add(2, 3))\"")
+        run_res = aci.run_cmd(f"{sb.python_cmd} -c \"import sample; print(sample.add(2, 3))\"")
         assert run_res.exit_code == 0
         assert "5" in run_res.output.strip()
 
@@ -74,7 +74,7 @@ def test_sandbox_path_traversal_protection():
 def test_sandbox_output_truncation():
     with Sandbox() as sb:
         # Generate output larger than 500KB
-        res = sb.exec("py -3.13 -c \"print('A' * 600000)\"")
+        res = sb.exec(f"{sb.python_cmd} -c \"print('A' * 600000)\"")
         assert len(res.stdout) <= 500500
         assert "truncated at 500KB" in res.stdout
 

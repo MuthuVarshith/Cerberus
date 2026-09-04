@@ -181,7 +181,7 @@ def run_swe_bench_lite_smoke() -> List[RunRecord]:
         patch_res = patch_agent.run_patch_loop(["calc.py"], lambda att, fb: diff_1)
 
         regr_agent = RegressionAgent(sb)
-        regr_res = regr_agent.run_regression_suite(["calc.py"], test_suite_cmd="py -3.13 -m pytest test_legacy.py")
+        regr_res = regr_agent.run_regression_suite(["calc.py"], test_suite_cmd=f"{sb.python_cmd} -m pytest test_legacy.py")
         decision = AdmissionController.evaluate(patch_res, regr_res)
 
         records.append(
@@ -222,7 +222,7 @@ def run_swe_bench_lite_smoke() -> List[RunRecord]:
 
         patch_res = patch_agent.run_patch_loop(["parser.py"], self_heal_gen)
         regr_agent = RegressionAgent(sb)
-        regr_res = regr_agent.run_regression_suite(["parser.py"], test_suite_cmd="py -3.13 -m pytest test_slice_legacy.py")
+        regr_res = regr_agent.run_regression_suite(["parser.py"], test_suite_cmd=f"{sb.python_cmd} -m pytest test_slice_legacy.py")
         decision = AdmissionController.evaluate(patch_res, regr_res)
 
         records.append(
@@ -288,7 +288,7 @@ def run_swe_bench_lite_smoke() -> List[RunRecord]:
         patch_agent = PatchAgent(sb, max_attempts=2)
         patch_res = patch_agent.run_patch_loop(["core.py"], lambda att, fb: bad_patch)
         regr_agent = RegressionAgent(sb)
-        regr_res = regr_agent.run_regression_suite(["core.py"], test_suite_cmd="py -3.13 -m pytest test_suite.py")
+        regr_res = regr_agent.run_regression_suite(["core.py"], test_suite_cmd=f"{sb.python_cmd} -m pytest test_suite.py")
         decision = AdmissionController.evaluate(patch_res, regr_res)
 
         records.append(
@@ -329,7 +329,7 @@ def run_swe_bench_lite_smoke() -> List[RunRecord]:
         patch_agent = PatchAgent(sb, max_attempts=1)
         patch_res = patch_agent.run_patch_loop(["auth.py"], lambda att, fb: leak_diff)
         regr_agent = RegressionAgent(sb)
-        regr_res = regr_agent.run_regression_suite(["auth.py"], test_suite_cmd="py -3.13 -m pytest test_auth_legacy.py")
+        regr_res = regr_agent.run_regression_suite(["auth.py"], test_suite_cmd=f"{sb.python_cmd} -m pytest test_auth_legacy.py")
         decision = AdmissionController.evaluate(patch_res, regr_res)
 
         records.append(

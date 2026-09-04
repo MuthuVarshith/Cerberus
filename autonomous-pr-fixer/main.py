@@ -207,9 +207,7 @@ def run_pipeline(
         sb.write_file(top_file, repaired_code)
 
         # Re-run target test to verify GREEN against real code changes
-        test_run = sb.exec("py -3.13 -m pytest test_reproduce.py -q")
-        if test_run.exit_code != 0:
-            test_run = sb.exec("py -3 -m pytest test_reproduce.py -q")
+        test_run = sb.exec(f"{sb.python_cmd} -m pytest test_reproduce.py -q")
 
         reached_green = (test_run.exit_code == 0)
 
@@ -245,9 +243,9 @@ def run_pipeline(
         log_event(run_id, "REGRESSION", "STARTED", issue_number, "Running regression suite")
         regr_agent = RegressionAgent(sb)
         reg_cmd = (
-            "py -3.13 -m pytest tests/test_sandbox.py -q"
+            f"{sb.python_cmd} -m pytest tests/test_sandbox.py -q"
             if os.path.exists(os.path.join(sb.workspace_dir, "tests", "test_sandbox.py"))
-            else "py -3 -c \"print('3 passed')\""
+            else f"{sb.python_cmd} -c \"print('3 passed')\""
         )
         regr_res = regr_agent.run_regression_suite([top_file], test_suite_cmd=reg_cmd)
         # Update blast radius with authoritative diff stats

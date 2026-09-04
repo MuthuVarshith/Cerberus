@@ -110,4 +110,4 @@ class TriageAgent:
         return "pip"
 
     def _detect_test_framework(self) -> tuple[str, str]:
-        return "pytest", "py -3.13 -m pytest -q"
+        return "pytest", f"{self.sandbox.python_cmd} -m pytest -q"

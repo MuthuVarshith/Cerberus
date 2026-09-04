@@ -264,9 +264,9 @@ python main.py --issue 1 --dry-run
 
 > `main.py` is a **scripted demonstration**. It exercises triage → localization → RED gate → regression → blast radius → admission → `run.json` on a known bug, but the corrected file it writes is hard-coded (`main.py:189–207`). It shows that the gates work; it does not show a model repairing anything. See §1.
 
-### Portability note
+### Portability
 
-17 call sites hardcode the Windows Python launcher (`py -3.13` / `py -3`) — in `main.py`, `agents/patch_agent.py`, and several tests. On macOS, Linux, or a CI runner these invocations fail. Replace them with `sys.executable` (or `python3`) before running outside Windows.
+Commands are built against the interpreter running the harness, not a hardcoded launcher. [`harness/py_interpreter.py`](autonomous-pr-fixer/harness/py_interpreter.py) resolves `sys.executable` once (quoting it when the path contains spaces), and `Sandbox.python_cmd` returns `python` instead when the sandbox is a container, where a host path would be meaningless. Windows, macOS, Linux, and CI runners all work without configuration.
 
 ### Configuration
 
@@ -321,19 +321,20 @@ Artifacts under `artifacts/` with `schema_version: 1.0` predate Gate 4 and recor
 ```
 intelligent-noether/
 ├── README.md                        ← this file (canonical)
+├── .gitignore
+├── .github/workflows/ci.yml         tests on ubuntu + windows, secret audit
 └── autonomous-pr-fixer/
     ├── main.py                      scripted 8-stage demo
     ├── requirements.txt
     ├── .env.example
     ├── agents/                      triage, localization, reproduction, patch, regression
-    ├── harness/                     admission_controller, pipeline_state,
-    │                                docker_sandbox, diff_utils, run_artifact, config
+    ├── harness/                     admission_controller, pipeline_state, docker_sandbox,
+    │                                diff_utils, run_artifact, py_interpreter, config
     ├── github/                      webhook_handler, pr_publisher
     ├── retrieval/                   AST index + lexical search
     ├── evaluation/                  swe_bench, baseline, ablation, metrics_reporter
     ├── tests/                       54 tests
-    ├── artifacts/                   run.json audit trail
-    └── .github/workflows/ci.yml     ⚠ see §13
+    └── artifacts/                   run.json audit trail (gitignored)
 ```
 
 ## 13. Known Limitations & Roadmap
@@ -341,15 +342,14 @@ intelligent-noether/
 Ordered by what most limits the project today.
 
 1. **No model in the loop.** Patch synthesis and reproduction-test synthesis are the two places a model belongs, and neither is connected. `PatchAgent.run_patch_loop` already accepts a proposal callback, so this is an integration task, not a redesign.
-2. **CI cannot run.** `.github/workflows/ci.yml` sits inside `autonomous-pr-fixer/`; GitHub Actions only reads workflows from the **repository root** `.github/workflows/`. It also has a syntax error — line 26 uses `hashFiles("**/requirements.txt")`, but Actions expressions require single quotes. Both must be fixed for the pipeline to execute.
-3. **Windows-only Python invocation.** See §10.
-4. **Webhook signature verification fails open** when the secret is unset (§8).
-5. **Token leakage on push failure** — `publish_pr` returns raw git stderr (§8).
-6. **Evaluation numbers are partly stipulated** (§9.1). Real SWE-bench Lite integration, real token accounting, and ground-truth localization scoring are all outstanding.
-7. **Diff-source inconsistency.** `diff_utils.get_workspace_diff` runs plain `git diff` (worktree vs. index) while `RegressionAgent` uses `git diff --name-only HEAD` / `--numstat HEAD`. These agree only while nothing is staged. Anything that stages files will make Gate 3 and Gate 4 read different pictures of the same workspace.
-8. **Patch config is inert.** `PATCH_MAX_ATTEMPTS` / `PATCH_MAX_LINES_CHANGED` are parsed and discarded.
-9. **`build_evidence_report` is unreachable** from the CLI (§11).
-10. **Single-language.** AST analysis is Python-only. The retrieval layer would need per-language grammars to generalize.
+2. **Webhook signature verification fails open** when the secret is unset (§8).
+3. **Token leakage on push failure** — `publish_pr` returns raw git stderr (§8).
+4. **Evaluation numbers are partly stipulated** (§9.1). Real SWE-bench Lite integration, real token accounting, and ground-truth localization scoring are all outstanding.
+5. **Diff-source inconsistency.** `diff_utils.get_workspace_diff` runs plain `git diff` (worktree vs. index) while `RegressionAgent` uses `git diff --name-only HEAD` / `--numstat HEAD`. These agree only while nothing is staged. Anything that stages files will make Gate 3 and Gate 4 read different pictures of the same workspace.
+6. **Patch config is inert.** `PATCH_MAX_ATTEMPTS` / `PATCH_MAX_LINES_CHANGED` are parsed and discarded.
+7. **`build_evidence_report` is unreachable** from the CLI (§11).
+8. **Single-language.** AST analysis is Python-only. The retrieval layer would need per-language grammars to generalize.
+9. **Docker mode is untested.** The container flags in §7 are written but have never executed here; every measurement in §9 came from the process-fallback sandbox.
 
 ---
 

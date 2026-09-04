@@ -20,6 +20,8 @@ import time
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
+from harness.py_interpreter import CONTAINER_PYTHON, HOST_PYTHON
+
 MAX_OUTPUT_CHARS = 500_000
 
 
@@ -153,6 +155,15 @@ class Sandbox:
 
         self.is_docker = False
         self.is_alive = True
+
+    @property
+    def python_cmd(self) -> str:
+        """Interpreter token valid for commands executed inside this sandbox.
+
+        Docker mode runs in the image, where a host interpreter path does not
+        exist; fallback mode runs on the host, where a bare name may not resolve.
+        """
+        return CONTAINER_PYTHON if self.is_docker else HOST_PYTHON
 
     def _safe_resolve(self, rel_path: str) -> str:
         """Ensure rel_path does not escape workspace_dir (prevent path traversal)."""
