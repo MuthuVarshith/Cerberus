@@ -4,6 +4,7 @@ FastAPI Webhook Listener for GitHub Issue and @bot-fix events.
 Security hardening:
   - HMAC SHA-256 signature verification (X-Hub-Signature-256)
   - Constant-time comparison via hmac.compare_digest
+  - Fails *closed*: an unset GITHUB_WEBHOOK_SECRET rejects every delivery
   - X-GitHub-Delivery idempotency tracking (in-memory set)
   - Background task execution via FastAPI BackgroundTasks
   - Rejects invalid/duplicate/unsupported events with 4xx
@@ -31,21 +32,66 @@ def _get_webhook_secret() -> Optional[bytes]:
     return secret.encode("utf-8") if secret else None
 
 
+def _unsigned_deliveries_allowed() -> bool:
+    """True only when an operator has explicitly opted out of verification.
+
+    This exists so a developer replaying captured payloads at localhost is not
+    forced to invent a secret. It is deliberately an opt-*in* to the insecure
+    path: the variable has to be set on purpose, and the endpoint says so loudly
+    on every request it lets through.
+    """
+    return os.environ.get("CERBERUS_ALLOW_UNSIGNED_WEBHOOKS", "").lower() in ("1", "true", "yes")
+
+
 def _verify_signature(payload_bytes: bytes, signature_header: Optional[str]) -> bool:
-    """Verify HMAC-SHA256 signature. Returns True when valid or no secret configured."""
+    """Verify the HMAC-SHA256 signature. Returns True only for a valid signature.
+
+    Fails closed. A missing secret is a misconfiguration, not permission to skip
+    the check: without it the endpoint cannot distinguish GitHub from anyone else
+    who found the URL, and this handler dispatches code-modifying work.
+    """
     secret = _get_webhook_secret()
     if secret is None:
-        logger.warning(
-            "GITHUB_WEBHOOK_SECRET is not set. "
-            "Signature verification is DISABLED. Set it in production."
+        if _unsigned_deliveries_allowed():
+            logger.warning(
+                "GITHUB_WEBHOOK_SECRET is not set and CERBERUS_ALLOW_UNSIGNED_WEBHOOKS "
+                "is enabled: accepting an UNVERIFIED delivery. Never use this in production."
+            )
+            return True
+        logger.error(
+            "GITHUB_WEBHOOK_SECRET is not set: rejecting delivery. Set the secret to "
+            "enable verification, or CERBERUS_ALLOW_UNSIGNED_WEBHOOKS=1 for local replay."
         )
-        return True
+        return False
     if not signature_header:
         return False
     if not signature_header.startswith("sha256="):
         return False
     expected = "sha256=" + hmac.new(secret, payload_bytes, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature_header)
+
+
+def _resolve_repo_dir() -> Optional[str]:
+    """Local checkout the pipeline should operate on, or None if unusable.
+
+    A webhook carries a repo *slug*; the sandbox needs a real directory on disk.
+    CERBERUS_REPO_DIR names it. When it is absent there is no defensible default
+    — running against the server's working directory would point the patch loop
+    at whatever happens to be there — so dispatch is refused instead.
+    """
+    repo_dir = os.environ.get("CERBERUS_REPO_DIR", "").strip()
+    if not repo_dir or not os.path.isdir(repo_dir):
+        return None
+    return repo_dir
+
+
+def _dry_run_enabled() -> bool:
+    """Whether the dispatched pipeline stops short of publishing a real PR.
+
+    Defaults to True: a webhook arriving at a fresh deployment should not open
+    pull requests on someone's repository until that is switched on deliberately.
+    """
+    return os.environ.get("CERBERUS_WEBHOOK_DRY_RUN", "1").lower() not in ("0", "false", "no")
 
 
 def _run_repair_pipeline(
@@ -55,10 +101,47 @@ def _run_repair_pipeline(
     repo_slug: str,
     delivery_id: str,
 ) -> None:
-    """Background task: placeholder for real pipeline invocation."""
+    """Background task: run the full verification pipeline for one issue."""
     logger.info(
         "repair_pipeline_started delivery_id=%s issue=%s repo=%s",
         delivery_id, issue_number, repo_slug,
+    )
+
+    repo_dir = _resolve_repo_dir()
+    if repo_dir is None:
+        logger.error(
+            "repair_pipeline_skipped delivery_id=%s issue=%s reason=%s",
+            delivery_id, issue_number,
+            "CERBERUS_REPO_DIR is unset or does not name a directory",
+        )
+        return
+
+    # Imported here, not at module scope: it pulls in the whole agent stack and
+    # would make `github.webhook_handler` unimportable (and untestable) whenever
+    # any agent dependency is missing.
+    from main import run_pipeline
+
+    dry_run = _dry_run_enabled()
+    try:
+        admitted = run_pipeline(
+            repo_dir=repo_dir,
+            issue_number=issue_number,
+            issue_title=issue_title,
+            issue_body=issue_body,
+            dry_run=dry_run,
+            mode="github",
+        )
+    except Exception:
+        # A background task that raises dies silently inside Starlette, so the
+        # traceback is captured here or it is lost.
+        logger.exception(
+            "repair_pipeline_failed delivery_id=%s issue=%s", delivery_id, issue_number,
+        )
+        return
+
+    logger.info(
+        "repair_pipeline_finished delivery_id=%s issue=%s admitted=%s dry_run=%s",
+        delivery_id, issue_number, admitted, dry_run,
     )
 
 

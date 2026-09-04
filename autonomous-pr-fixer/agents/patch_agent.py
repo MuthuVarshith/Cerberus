@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, List, Optional
 from harness.diff_utils import DiffUtils, PatchApplicationResult
 from harness.docker_sandbox import Sandbox
 from harness.tools import ACI
+from harness.config import patch_policy_defaults
 
 
 @dataclass
@@ -61,13 +62,19 @@ class PatchAgent:
     def __init__(
         self,
         sandbox: Sandbox,
-        max_attempts: int = 5,
-        max_lines_changed: int = 150,
+        max_attempts: Optional[int] = None,
+        max_lines_changed: Optional[int] = None,
     ):
+        """Explicit arguments win; anything left unset comes from PATCH_MAX_* env vars.
+
+        The ablation study passes attempt budgets deliberately, so configuration
+        fills in only what a caller did not choose.
+        """
+        env_attempts, env_lines = patch_policy_defaults()
         self.sandbox = sandbox
         self.aci = ACI(sandbox)
-        self.max_attempts = max_attempts
-        self.max_lines_changed = max_lines_changed
+        self.max_attempts = env_attempts if max_attempts is None else max_attempts
+        self.max_lines_changed = env_lines if max_lines_changed is None else max_lines_changed
 
     def run_patch_loop(
         self,
@@ -226,7 +233,10 @@ class PatchAgent:
 
         return PatchLoopResult(
             reached_green=False,
-            total_attempts=self.max_attempts,
+            # Attempts actually made, which is fewer than the budget when the loop
+            # aborted early (duplicate diff). Reporting the budget here inflated
+            # the attempt counts in the evaluation metrics.
+            total_attempts=len(history) or self.max_attempts,
             winning_diff="",
             history=history,
         )

@@ -24,6 +24,20 @@ class PatchApplicationResult:
 class DiffUtils:
     """Manages unified diff parsing, validation, application, and rollback."""
 
+    #: Revision every gate diffs against.
+    #:
+    #: Gate 3 (blast radius) and Gate 4 (real diff) must observe the same
+    #: workspace. Plain `git diff` compares the worktree against the *index*,
+    #: so the moment anything is staged it disagrees with `git diff HEAD` about
+    #: what the patch changed — one gate can see an edit the other cannot.
+    #: Reading both through this constant makes that divergence impossible.
+    #:
+    #: Note: neither form reports untracked files, so a patch that only adds a
+    #: new file still reads as empty. Fixing that needs an index write
+    #: (`git add -N`), which would break the `git checkout -- .` rollback the
+    #: patch loop depends on, so it is left as a known limitation.
+    DIFF_BASE = "HEAD"
+
     @staticmethod
     def generate_unified_diff(original: str, modified: str, file_path: str) -> str:
         """Generates a standard unified diff format string."""
@@ -115,9 +129,51 @@ class DiffUtils:
 
     @staticmethod
     def get_workspace_diff(sandbox: Sandbox) -> str:
-        """Captures authoritative git diff from sandbox workspace."""
-        res = sandbox.exec("git diff")
+        """Captures the authoritative unified diff for the sandbox workspace."""
+        res = sandbox.exec(f"git diff {DiffUtils.DIFF_BASE}")
         return res.stdout if res.exit_code == 0 else ""
+
+    @staticmethod
+    def get_changed_files(sandbox: Sandbox, exclude_harness: bool = True) -> List[str]:
+        """Lists files changed against DIFF_BASE, normalised to forward slashes.
+
+        Harness scaffolding (the reproduction test, `.harness*` scratch files) is
+        excluded by default: it is written by the harness itself, so counting it
+        as part of the patch would inflate every blast radius.
+        """
+        res = sandbox.exec(f"git diff --name-only {DiffUtils.DIFF_BASE}")
+        if not res.stdout.strip():
+            return []
+        files = [f.replace("\\", "/") for f in res.stdout.strip().splitlines()]
+        if not exclude_harness:
+            return files
+        return [
+            f for f in files
+            if not f.endswith("test_reproduce.py") and not f.startswith(".harness")
+        ]
+
+    @staticmethod
+    def get_diff_line_counts(sandbox: Sandbox, exclude_harness: bool = True) -> Tuple[int, int]:
+        """Returns (lines_added, lines_deleted) against DIFF_BASE."""
+        res = sandbox.exec(f"git diff --numstat {DiffUtils.DIFF_BASE}")
+        added = 0
+        deleted = 0
+        for line in res.stdout.strip().splitlines():
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            path = parts[2].replace("\\", "/")
+            if exclude_harness and (
+                path.endswith("test_reproduce.py") or path.startswith(".harness")
+            ):
+                continue
+            try:
+                added += int(parts[0])
+                deleted += int(parts[1])
+            except ValueError:
+                # Binary files report "-" instead of a count.
+                pass
+        return added, deleted
 
     @staticmethod
     def compute_diff_hash(diff_text: str) -> str:

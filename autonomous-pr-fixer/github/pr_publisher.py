@@ -2,11 +2,15 @@
 GitHub PR Publisher.
 Formats comprehensive machine- and human-readable verification reports,
 saves complete JSON audit trail artifacts, and publishes pull requests only upon Admission Controller approval.
+
+Secret handling: git writes the remote URL into its own error messages, so any
+git output that leaves this module is passed through `redact_secrets` first.
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.request
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -15,6 +19,38 @@ from harness.docker_sandbox import Sandbox
 from agents.patch_agent import PatchLoopResult
 from agents.regression_agent import RegressionReport
 from agents.reproduction_agent import ReproductionResult
+
+REDACTED = "***REDACTED***"
+
+#: Credentials embedded in a remote URL, e.g. https://x-access-token:ghp_xxx@github.com/...
+#: git echoes the full URL back on a failed push, which is how a token reaches a log.
+_URL_CREDENTIALS_RE = re.compile(r"(https?://)[^/\s@]+@")
+
+#: Token shapes that should never appear in output even if they arrived from
+#: somewhere other than `self.token` (a stale remote, an ambient env var).
+_TOKEN_SHAPES_RE = re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b")
+
+#: Characters a git branch name may contain here. Everything else is dropped:
+#: branch names are interpolated into shell command strings, and an issue-derived
+#: value must not be able to terminate the command and start another.
+_SAFE_REF_RE = re.compile(r"[^A-Za-z0-9._/-]")
+
+
+def redact_secrets(text: str, *secrets: Optional[str]) -> str:
+    """Remove credentials from text that is about to be returned, logged, or displayed."""
+    if not text:
+        return text
+    for secret in secrets:
+        if secret and len(secret) >= 8:
+            text = text.replace(secret, REDACTED)
+    text = _URL_CREDENTIALS_RE.sub(rf"\1{REDACTED}@", text)
+    return _TOKEN_SHAPES_RE.sub(REDACTED, text)
+
+
+def sanitize_ref(name: str, fallback: str = "cerberus-fix") -> str:
+    """Reduce a branch name to characters that are both git-legal and shell-inert."""
+    cleaned = _SAFE_REF_RE.sub("-", name).strip("-/.")
+    return cleaned[:120] or fallback
 
 
 class PRPublisher:
@@ -40,7 +76,13 @@ class PRPublisher:
             repro_snippet = repro_snippet[-800:]
 
         radius = regression_res.blast_radius
-        tokens = token_usage or {"prompt_tokens": 1250, "completion_tokens": 320, "total_tokens": 1570}
+        # No invented number here. This report is the project's evidence artifact;
+        # a plausible-looking default token count would be indistinguishable from a
+        # measured one to anyone reading the PR.
+        if token_usage and token_usage.get("total_tokens"):
+            tokens_line = f"`{token_usage['total_tokens']} tokens`"
+        else:
+            tokens_line = "`not measured (no model in the loop)`"
 
         body = f"""## 🤖 Cerberus Autonomous Repair: Issue #{issue_number}
 **Title:** `{issue_title}`
@@ -100,7 +142,7 @@ A minimal reproduction test was synthesized and verified to **FAIL** on the unpa
 ---
 
 ### 5️⃣ Efficiency & Observability
-- **Estimated Token Consumption:** `{tokens.get('total_tokens', 0)} tokens`
+- **Token Consumption:** {tokens_line}
 - **Execution Time:** `{regression_res.execution_time_sec}s`
 
 *Generated autonomously by Cerberus: Verification-First Software Repair Harness*
@@ -185,26 +227,40 @@ A minimal reproduction test was synthesized and verified to **FAIL** on the unpa
                 "body": pr_body,
             }
 
+        safe_branch = sanitize_ref(branch_name)
+        clean_remote = f"https://github.com/{repo_slug}.git"
         auth_url = f"https://x-access-token:{self.token}@github.com/{repo_slug}.git"
-        
-        # Try to set URL if origin exists, otherwise add it
+
+        # The stored remote is the *clean* URL. Pushing to an explicit authenticated
+        # URL keeps the token out of the sandbox's .git/config, which otherwise
+        # survives on disk next to the run artifacts.
         remote_check = self.sandbox.exec("git remote")
         if "origin" in remote_check.stdout:
-            self.sandbox.exec(f"git remote set-url origin {auth_url}")
+            self.sandbox.exec(f"git remote set-url origin {clean_remote}")
         else:
-            self.sandbox.exec(f"git remote add origin {auth_url}")
-            
-        self.sandbox.exec(f"git checkout -b {branch_name}")
+            self.sandbox.exec(f"git remote add origin {clean_remote}")
+
+        self.sandbox.exec(f"git checkout -b {safe_branch}")
         self.sandbox.exec("git add -A")
-        self.sandbox.exec(f"git commit -m \"{pr_title}\"")
-        
-        push_res = self.sandbox.exec(f"git push -u origin {branch_name}")
+
+        # Commit message via file, not -m: pr_title embeds the issue title, which
+        # comes from a webhook payload and would otherwise be interpolated into a
+        # shell command string.
+        msg_rel_path = ".harness_commit_msg.txt"
+        self.sandbox.write_file(msg_rel_path, pr_title + "\n")
+        self.sandbox.exec(f"git commit -F {msg_rel_path}")
+        try:
+            os.remove(os.path.join(self.sandbox.workspace_dir, msg_rel_path))
+        except OSError:
+            pass
+
+        push_res = self.sandbox.exec(f"git push -u {auth_url} {safe_branch}")
         if push_res.exit_code != 0:
             return {
                 "status": "error",
-                "error": f"Git push failed: {push_res.stderr}",
+                "error": redact_secrets(f"Git push failed: {push_res.stderr}", self.token),
                 "pr_title": pr_title,
-                "branch": branch_name,
+                "branch": safe_branch,
                 "body": pr_body,
             }
 
@@ -217,8 +273,10 @@ A minimal reproduction test was synthesized and verified to **FAIL** on the unpa
         payload = {
             "title": pr_title,
             "body": pr_body,
-            "head": branch_name,
-            "base": "main",
+            "head": safe_branch,
+            # Repositories disagree on the default branch name, and a wrong base
+            # makes the API reject the PR after the push already succeeded.
+            "base": os.environ.get("GITHUB_BASE_BRANCH", "main"),
         }
 
         req = urllib.request.Request(
@@ -233,7 +291,7 @@ A minimal reproduction test was synthesized and verified to **FAIL** on the unpa
                 return {
                     "status": "published",
                     "pr_title": pr_title,
-                    "branch": branch_name,
+                    "branch": safe_branch,
                     "repo": repo_slug,
                     "pr_url": data.get("html_url", ""),
                     "body": pr_body,
@@ -241,8 +299,8 @@ A minimal reproduction test was synthesized and verified to **FAIL** on the unpa
         except Exception as e:
             return {
                 "status": "error",
-                "error": str(e),
+                "error": redact_secrets(str(e), self.token),
                 "pr_title": pr_title,
-                "branch": branch_name,
+                "branch": safe_branch,
                 "body": pr_body,
             }

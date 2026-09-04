@@ -16,6 +16,7 @@ import argparse
 import os
 import sys
 import uuid
+from typing import Dict, Optional
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
@@ -31,7 +32,20 @@ from agents.reproduction_agent import ReproductionAgent
 from agents.localization_agent import LocalizationAgent
 from agents.patch_agent import PatchAgent, PatchLoopResult
 from agents.regression_agent import RegressionAgent
+from agents.llm_patch_generator import LLMPatchGenerator, has_api_key
 from github.pr_publisher import PRPublisher
+
+
+def _llm_patching_enabled(explicit: Optional[bool] = None) -> bool:
+    """Whether stage 5 should ask a model for the patch.
+
+    Off unless asked for. The scripted repair below is what makes the demo
+    reproducible offline, and silently switching to a paid API call because a key
+    happens to be exported in the shell would be a surprising default.
+    """
+    if explicit is not None:
+        return explicit
+    return os.environ.get("CERBERUS_USE_LLM", "").lower() in ("1", "true", "yes")
 
 
 def run_pipeline(
@@ -41,6 +55,7 @@ def run_pipeline(
     issue_body: str,
     dry_run: bool = True,
     mode: str = "local",
+    use_llm: Optional[bool] = None,
 ) -> bool:
     run_id = f"run_{uuid.uuid4().hex[:10]}"
     cfg = load_config()
@@ -183,42 +198,77 @@ def run_pipeline(
         print("\n[5/8] PATCH LOOP")
         sm.transition(PipelineState.PATCH_PENDING)
         log_event(run_id, "PATCH_LOOP", "STARTED", issue_number, "Entering patch loop")
-        print("  -> Attempt 1: candidate patch applied to workspace")
 
-        # Apply genuine fix to target code in sandbox
-        if has_votevault:
-            orig_app = sb.read_file("app.py")
-            repaired_code = orig_app.replace(
-                "from io import StringIO",
-                "from io import BytesIO, StringIO"
-            ).replace(
-                "StringIO(output.read())",
-                "BytesIO(output.getvalue().encode('utf-8'))"
+        token_usage: Optional[Dict[str, int]] = None
+        want_llm = _llm_patching_enabled(use_llm)
+
+        if want_llm and not has_api_key():
+            # Asked for, but impossible. Saying so beats quietly producing a
+            # scripted patch and labelling it a model's work.
+            print("  [WARN] --use-llm requested but no ANTHROPIC_API_KEY/OPENAI_API_KEY is set.")
+            print("         Falling back to the deterministic scripted repair.")
+            want_llm = False
+
+        if want_llm:
+            print(f"  -> Model-generated patches, boundary: {top_file}")
+            generator = LLMPatchGenerator(
+                sandbox=sb,
+                candidate_files=[top_file],
+                issue_title=issue_title,
+                issue_body=issue_body,
             )
+            print(f"  -> Model: {generator.model}")
+            patch_agent = PatchAgent(sb, max_lines_changed=cfg.patch_max_lines_changed)
+            loop_res = patch_agent.run_patch_loop([top_file], generator)
+            reached_green = loop_res.reached_green
+            attempts = loop_res.total_attempts
+            # Real measurement, so the reporter and the PR body may present it as one.
+            token_usage = {
+                "prompt_tokens": generator.usage.prompt_tokens,
+                "completion_tokens": generator.usage.completion_tokens,
+                "total_tokens": generator.usage.total_tokens,
+            }
+            print(f"  -> {attempts} attempt(s), {generator.usage.total_tokens} tokens")
         else:
-            repaired_code = (
-                "def calculate_rate(amount: float, total: float) -> float:\n"
-                "    \"\"\"Calculate the rate as amount / total.\"\"\"\n"
-                "    if total == 0:\n"
-                "        return 0.0\n"
-                "    return amount / total\n"
-            )
+            print("  -> Attempt 1: candidate patch applied to workspace")
 
-        sb.write_file(top_file, repaired_code)
+            # Apply genuine fix to target code in sandbox
+            if has_votevault:
+                orig_app = sb.read_file("app.py")
+                repaired_code = orig_app.replace(
+                    "from io import StringIO",
+                    "from io import BytesIO, StringIO"
+                ).replace(
+                    "StringIO(output.read())",
+                    "BytesIO(output.getvalue().encode('utf-8'))"
+                )
+            else:
+                repaired_code = (
+                    "def calculate_rate(amount: float, total: float) -> float:\n"
+                    "    \"\"\"Calculate the rate as amount / total.\"\"\"\n"
+                    "    if total == 0:\n"
+                    "        return 0.0\n"
+                    "    return amount / total\n"
+                )
 
-        # Re-run target test to verify GREEN against real code changes
-        test_run = sb.exec(f"{sb.python_cmd} -m pytest test_reproduce.py -q")
+            sb.write_file(top_file, repaired_code)
 
-        reached_green = (test_run.exit_code == 0)
+            # Re-run target test to verify GREEN against real code changes
+            test_run = sb.exec(f"{sb.python_cmd} -m pytest test_reproduce.py -q")
 
-        # Capture authoritative git diff from sandbox
+            reached_green = (test_run.exit_code == 0)
+            attempts = 1
+
+        # The diff is read back off the workspace in both paths, so what gets
+        # measured, gated, and published is the state of the files on disk rather
+        # than whatever the generator claimed it was changing.
         actual_diff = DiffUtils.get_workspace_diff(sb)
         diff_stats = DiffUtils.compute_diff_stats(actual_diff)
         diff_hash = DiffUtils.compute_diff_hash(actual_diff)
 
         patch_res = PatchLoopResult(
             reached_green=reached_green,
-            total_attempts=1,
+            total_attempts=attempts,
             winning_diff=actual_diff,
             history=[],
             total_lines_changed=diff_stats["total_lines"],
@@ -241,7 +291,9 @@ def run_pipeline(
         print("\n[6/8] REGRESSION")
         sm.transition(PipelineState.REGRESSION_PENDING)
         log_event(run_id, "REGRESSION", "STARTED", issue_number, "Running regression suite")
-        regr_agent = RegressionAgent(sb)
+        # PATCH_MAX_LINES_CHANGED is the configured minimal-patch budget; the
+        # blast-radius gate is where it is actually enforced in this path.
+        regr_agent = RegressionAgent(sb, max_total_lines=cfg.patch_max_lines_changed)
         reg_cmd = (
             f"{sb.python_cmd} -m pytest tests/test_sandbox.py -q"
             if os.path.exists(os.path.join(sb.workspace_dir, "tests", "test_sandbox.py"))
@@ -298,14 +350,6 @@ def run_pipeline(
 
         # Determine PR publication behavior
         is_dry_run = dry_run or (mode == "local")
-        pr_info = publisher.publish_pr(
-            issue_number=issue_number,
-            issue_title=issue_title,
-            repo_slug=cfg.github_repo_slug or "org/repo",
-            branch_name=triage_report.working_branch,
-            pr_body="",
-            dry_run=is_dry_run,
-        )
 
         patch_stat_display = f"+{blast.lines_added}/-{blast.lines_deleted} in {len(blast.observed_files)} file(s), hash: {diff_hash[:12]}"
 
@@ -319,6 +363,41 @@ def run_pipeline(
             else:
                 sm.transition(PipelineState.REJECTED_ADMISSION)
             log_event(run_id, "ADMISSION", "REJECTED", issue_number, decision.rejection_summary)
+
+        # Publication is gated on the admission decision, not merely reported
+        # alongside it. The four gates are a conjunction; if they do not all hold,
+        # nothing is pushed and no PR is opened.
+        repo_slug = cfg.github_repo_slug or "org/repo"
+        if decision.approved:
+            pr_body = publisher.build_evidence_report(
+                issue_number=issue_number,
+                issue_title=issue_title,
+                reproduction_res=repro_res,
+                patch_res=patch_res,
+                regression_res=regr_res,
+                decision=decision,
+                branch_name=triage_report.working_branch,
+                token_usage=token_usage,
+            )
+            pr_info = publisher.publish_pr(
+                issue_number=issue_number,
+                issue_title=issue_title,
+                repo_slug=repo_slug,
+                branch_name=triage_report.working_branch,
+                pr_body=pr_body,
+                dry_run=is_dry_run,
+            )
+        else:
+            pr_info = {
+                "status": "blocked",
+                "pr_title": f"fix(autobot): resolve issue #{issue_number} - {issue_title[:50]}",
+                "branch": triage_report.working_branch,
+                "repo": repo_slug,
+                "pr_url": None,
+                "display_url": f"PR: NOT CREATED (admission rejected: {decision.rejection_summary})",
+                "published": False,
+                "body": "",
+            }
 
         # Generate run artifact conforming to Section 7
         artifact_path = write_run_artifact(
@@ -432,6 +511,13 @@ if __name__ == "__main__":
     parser.add_argument("--body", default="calculate_rate(10, 0) throws ZeroDivisionError", help="Issue body")
     parser.add_argument("--mode", choices=["local", "github"], default="local", help="Execution mode: local sandbox repair or real GitHub integration")
     parser.add_argument("--dry-run", action="store_true", default=False, help="Dry run PR publishing (do not push/open PR)")
+    parser.add_argument(
+        "--use-llm",
+        action="store_true",
+        default=None,
+        help="Generate patches with a model (needs ANTHROPIC_API_KEY or OPENAI_API_KEY). "
+             "Also settable with CERBERUS_USE_LLM=1. Default is the offline scripted repair.",
+    )
 
     args = parser.parse_args()
     run_pipeline(
@@ -441,5 +527,6 @@ if __name__ == "__main__":
         issue_body=args.body,
         dry_run=args.dry_run,
         mode=args.mode,
+        use_llm=args.use_llm,
     )
 

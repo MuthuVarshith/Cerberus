@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 from harness.docker_sandbox import Sandbox
+from harness.diff_utils import DiffUtils
 
 
 @dataclass
@@ -61,30 +62,15 @@ class RegressionAgent:
         Compares expected repair scope against actual git diff.
         Extracts AST nodes for modified functions/classes.
         """
-        # Files changed in git
-        diff_names = self.sandbox.exec("git diff --name-only HEAD")
-        changed_raw = diff_names.stdout.strip().splitlines() if diff_names.stdout.strip() else []
-        changed_files = [
-            f.replace("\\", "/")
-            for f in changed_raw
-            if not f.endswith("test_reproduce.py") and not f.startswith(".harness")
-        ]
+        # Files changed, read through DiffUtils so Gate 3 and Gate 4 observe the
+        # same revision (see DiffUtils.DIFF_BASE).
+        changed_files = DiffUtils.get_changed_files(self.sandbox)
 
         expected_clean = {f.replace("\\", "/") for f in expected_candidates}
         unauthorized = [f for f in changed_files if f not in expected_clean]
 
         # Lines added / deleted
-        numstat = self.sandbox.exec("git diff --numstat HEAD")
-        added = 0
-        deleted = 0
-        for line in numstat.stdout.strip().splitlines():
-            parts = line.split()
-            if len(parts) >= 3 and not parts[2].endswith("test_reproduce.py"):
-                try:
-                    added += int(parts[0])
-                    deleted += int(parts[1])
-                except ValueError:
-                    pass
+        added, deleted = DiffUtils.get_diff_line_counts(self.sandbox)
 
         # Identify modified AST functions/classes
         modified_symbols: List[str] = []
