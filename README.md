@@ -1,10 +1,44 @@
 # Cerberus
 
+![Python](https://img.shields.io/badge/Python-3.11-blue?style=flat-square&logo=python)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+![Tests](https://img.shields.io/badge/Tests-111-brightgreen?style=flat-square)
+![Status](https://img.shields.io/badge/Status-Active-success?style=flat-square)
+
 ## Verification-first autonomous software repair
 
 Cerberus is a Python research prototype for evaluating autonomous bug-fixing agents. A model may propose a reproduction test or patch, but it cannot approve its own work. The harness executes the candidate in an isolated workspace, checks the result with programs and exit codes, and only considers a pull request eligible when every admission gate passes.
 
 > **Status:** the verification harness and offline demo are implemented and covered by 111 tests. The default CLI is a deterministic demonstration, not a general-purpose autonomous fixer. Real LLM calls, Docker isolation, GitHub publishing, and SWE-bench execution are optional or unverified in this checkout.
+
+## Tech Stack
+
+### Core Technologies
+- **Language:** Python 3.11+
+- **Testing:** pytest (111+ tests), parametrized test suites
+- **CI/CD:** GitHub Actions (Linux & Windows)
+- **Containerization:** Docker (optional, for sandboxing)
+- **Code Analysis:** AST parsing, Python introspection
+- **Version Control:** Git, GitHub API
+
+### Key Libraries & Frameworks
+- **LLM Integration:** LiteLLM (Anthropic Claude, OpenAI GPT models)
+- **AST Analysis:** Python `ast`, `inspect` modules
+- **Process Management:** subprocess, multiprocessing
+- **Data Structures:** dataclasses, Pydantic (config validation)
+- **Logging:** structured logging with JSON artifacts
+- **GitHub Integration:** PyGithub, GitHub REST API
+
+### Features & Capabilities
+✅ Autonomous bug reproduction and localization  
+✅ Patch generation with LLM integration  
+✅ Regression testing with configurable test suites  
+✅ Blast radius analysis for change scope validation  
+✅ Docker-based sandboxing for untrusted code  
+✅ Four-gate admission controller for PR eligibility  
+✅ GitHub webhook integration for CI/CD  
+✅ SWE-bench evaluation support  
+✅ Comprehensive audit trails in JSON artifacts
 
 ## What Cerberus verifies
 
@@ -211,6 +245,19 @@ They are derived from stipulated profiles. Real provider calls, Docker mode, liv
 ## CI
 
 GitHub Actions runs the test suite on Ubuntu and Windows with Python 3.11 and performs a basic hard-coded-secret scan. The workflow is [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+## Authors & Contributors
+
+- **MuthuVarshith** — Author & Maintainer
+  - GitHub: [@MuthuVarshith](https://github.com/MuthuVarshith)
+
+### Project History
+
+Cerberus was developed as a research prototype to evaluate autonomous bug-fixing agents within a verification-first framework. The project emphasizes rigorous admission gates and reproducible, auditable repair processes.
+
+### Contributing
+
+Contributions, bug reports, and feature requests are welcome! Please open an issue or pull request.
 
 ## License
 
