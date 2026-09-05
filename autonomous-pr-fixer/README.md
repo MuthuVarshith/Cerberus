@@ -17,7 +17,7 @@ python -m pytest tests/ -q
 | `github/` | webhook handler, PR publisher |
 | `retrieval/` | AST index + lexical search |
 | `evaluation/` | SWE-bench-style runner, baseline, ablation, metrics reporter |
-| `tests/` | 103 tests |
+| `tests/` | 111 tests |
 | `artifacts/` | `run.json` audit trail, one directory per run |
 
 Before citing any evaluation figure, read [§9 Evaluation](../README.md#9-evaluation) — the gate behaviour is measured; token counts and localization accuracy are not measured at all and are reported as `not measured` rather than filled in. CI for this project lives at the repository root, in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
