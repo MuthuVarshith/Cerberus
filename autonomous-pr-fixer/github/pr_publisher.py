@@ -93,7 +93,7 @@ class PRPublisher:
 ### 🛡️ Patch Admission Controller: **{'✅ APPROVED' if decision.approved else '❌ REJECTED'}**
 
 > This Pull Request was machine-verified by **Cerberus: Verification-First Autonomous Software Repair Harness**.
-> Unlike standard autonomous coding agents that open PRs based on unverified LLM generation, this patch satisfied all 3 mandatory verification gates.
+> Unlike standard autonomous coding agents that open PRs based on unverified LLM generation, this patch satisfied all 4 mandatory verification gates.
 
 #### Verification Breakdown:
 """

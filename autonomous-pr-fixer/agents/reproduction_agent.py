@@ -1,4 +1,4 @@
-﻿"""
+"""
 Reproduction Agent with a Hard RED Gate.
 Given an issue description and codebase, it synthesizes an isolated test_reproduce.py script.
 Enforces the strict TDD contract:
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Callable, Optional, Sequence, Tuple
 from harness.docker_sandbox import Sandbox
 from harness.tools import ACI
 
@@ -119,3 +119,33 @@ Given the following issue report, write a standalone Python test file named `tes
             returncode=exec_res.exit_code,
             raw_output=exec_res.output,
         )
+
+    def synthesize_and_verify(
+        self,
+        issue_title: str,
+        issue_body: str,
+        synthesizer_fn: Callable[[int, str], str],
+        max_attempts: int = 3,
+    ) -> ReproductionResult:
+        """Runs an iterative test synthesis loop until RED gate passes or max_attempts is reached."""
+        feedback = "Initial attempt: please provide a minimal test_reproduce.py reproducing the bug."
+        last_res: Optional[ReproductionResult] = None
+        for attempt in range(1, max_attempts + 1):
+            candidate_code = synthesizer_fn(attempt, feedback)
+            if not candidate_code.strip():
+                feedback = f"Attempt #{attempt} provided empty test code."
+                continue
+            res = self.run_reproduction_gate(issue_title, issue_body, candidate_code)
+            if res.reproduced:
+                return res
+            last_res = res
+            feedback = f"Attempt #{attempt} failed RED gate: {res.error_message}\nOutput:\n{res.raw_output}"
+
+        return last_res or ReproductionResult(
+            reproduced=False,
+            test_code="",
+            error_message=f"Reproduction synthesis exhausted {max_attempts} attempts without passing RED gate.",
+            returncode=-1,
+            raw_output="",
+        )
+

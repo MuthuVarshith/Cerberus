@@ -33,6 +33,7 @@ from agents.localization_agent import LocalizationAgent
 from agents.patch_agent import PatchAgent, PatchLoopResult
 from agents.regression_agent import RegressionAgent
 from agents.llm_patch_generator import LLMPatchGenerator, has_api_key
+from agents.llm_reproduction_synthesizer import LLMReproductionSynthesizer
 from github.pr_publisher import PRPublisher
 
 
@@ -48,6 +49,13 @@ def _llm_patching_enabled(explicit: Optional[bool] = None) -> bool:
     return os.environ.get("CERBERUS_USE_LLM", "").lower() in ("1", "true", "yes")
 
 
+def _llm_repro_enabled(explicit: Optional[bool] = None) -> bool:
+    """Whether stage 2 should synthesize reproduction tests using an LLM."""
+    if explicit is not None:
+        return explicit
+    return os.environ.get("CERBERUS_USE_LLM_REPRO", "").lower() in ("1", "true", "yes")
+
+
 def run_pipeline(
     repo_dir: str,
     issue_number: int,
@@ -56,6 +64,7 @@ def run_pipeline(
     dry_run: bool = True,
     mode: str = "local",
     use_llm: Optional[bool] = None,
+    use_llm_repro: Optional[bool] = None,
 ) -> bool:
     run_id = f"run_{uuid.uuid4().hex[:10]}"
     cfg = load_config()
@@ -119,34 +128,61 @@ def run_pipeline(
         log_event(run_id, "REPRODUCTION", "STARTED", issue_number, "Synthesizing test")
         repro_agent = ReproductionAgent(sb)
 
-        if has_votevault:
-            repro_code = (
-                "# Standalone minimal reproduction test for VoteVault export_votes\n"
-                "import pytest\n"
-                "from app import app\n"
-                "from models import db\n\n"
-                f"def test_issue_{issue_number}():\n"
-                "    with app.app_context():\n"
-                "        db.create_all()\n"
-                "    client = app.test_client()\n"
-                "    with client.session_transaction() as sess:\n"
-                "        sess['user_id'] = 1\n"
-                "        sess['is_admin'] = True\n"
-                "    resp = client.get('/export_votes')\n"
-                "    assert resp.status_code == 200, f'Expected 200 OK, got {resp.status_code}'\n"
-            )
-        else:
-            repro_code = (
-                "# Standalone minimal reproduction test\n"
-                "import pytest\n"
-                "from rate_calculator import calculate_rate\n\n"
-                f"def test_issue_{issue_number}():\n"
-                "    # Zero total should safely return 0.0 rather than raising ZeroDivisionError\n"
-                "    assert calculate_rate(10, 0) == 0.0\n"
-            )
+        want_repro_llm = _llm_repro_enabled(use_llm_repro)
+        if want_repro_llm and not has_api_key():
+            print("  [WARN] --use-llm-repro requested but no ANTHROPIC_API_KEY/OPENAI_API_KEY is set.")
+            print("         Falling back to the deterministic scripted reproduction test.")
+            want_repro_llm = False
 
-        repro_res = repro_agent.run_reproduction_gate(issue_title, issue_body, repro_code)
-        print("  [OK] Generated test_reproduce.py")
+        repro_res: Optional[ReproductionResult] = None
+        repro_tokens = 0
+        if want_repro_llm:
+            print(f"  -> Model-generated reproduction test, boundary: {target_code_file}")
+            repro_synth = LLMReproductionSynthesizer(
+                sandbox=sb,
+                candidate_files=[target_code_file],
+                issue_title=issue_title,
+                issue_body=issue_body,
+            )
+            print(f"  -> Model: {repro_synth.model}")
+            synth_res = repro_synth.synthesize_and_verify(max_attempts=3)
+            repro_tokens = repro_synth.usage.total_tokens
+            if synth_res.reproduced:
+                repro_res = synth_res
+                print(f"  [OK] Generated and verified test_reproduce.py via model ({repro_tokens} tokens)")
+            else:
+                print(f"  [WARN] Model reproduction failed: {synth_res.error_message}")
+                print("         Falling back to the deterministic scripted reproduction test.")
+
+        if repro_res is None:
+            if has_votevault:
+                repro_code = (
+                    "# Standalone minimal reproduction test for VoteVault export_votes\n"
+                    "import pytest\n"
+                    "from app import app\n"
+                    "from models import db\n\n"
+                    f"def test_issue_{issue_number}():\n"
+                    "    with app.app_context():\n"
+                    "        db.create_all()\n"
+                    "    client = app.test_client()\n"
+                    "    with client.session_transaction() as sess:\n"
+                    "        sess['user_id'] = 1\n"
+                    "        sess['is_admin'] = True\n"
+                    "    resp = client.get('/export_votes')\n"
+                    "    assert resp.status_code == 200, f'Expected 200 OK, got {resp.status_code}'\n"
+                )
+            else:
+                repro_code = (
+                    "# Standalone minimal reproduction test\n"
+                    "import pytest\n"
+                    "from rate_calculator import calculate_rate\n\n"
+                    f"def test_issue_{issue_number}():\n"
+                    "    # Zero total should safely return 0.0 rather than raising ZeroDivisionError\n"
+                    "    assert calculate_rate(10, 0) == 0.0\n"
+                )
+
+            repro_res = repro_agent.run_reproduction_gate(issue_title, issue_body, repro_code)
+            print("  [OK] Generated test_reproduce.py")
 
         # [3/8] RED GATE
         print("\n[3/8] RED GATE")
@@ -226,10 +262,16 @@ def run_pipeline(
             token_usage = {
                 "prompt_tokens": generator.usage.prompt_tokens,
                 "completion_tokens": generator.usage.completion_tokens,
-                "total_tokens": generator.usage.total_tokens,
+                "total_tokens": generator.usage.total_tokens + repro_tokens,
             }
-            print(f"  -> {attempts} attempt(s), {generator.usage.total_tokens} tokens")
+            print(f"  -> {attempts} attempt(s), {generator.usage.total_tokens} tokens (patch)")
         else:
+            if repro_tokens > 0:
+                token_usage = {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": repro_tokens,
+                }
             print("  -> Attempt 1: candidate patch applied to workspace")
 
             # Apply genuine fix to target code in sandbox
@@ -518,6 +560,13 @@ if __name__ == "__main__":
         help="Generate patches with a model (needs ANTHROPIC_API_KEY or OPENAI_API_KEY). "
              "Also settable with CERBERUS_USE_LLM=1. Default is the offline scripted repair.",
     )
+    parser.add_argument(
+        "--use-llm-repro",
+        action="store_true",
+        default=None,
+        help="Synthesize reproduction tests with a model (needs ANTHROPIC_API_KEY or OPENAI_API_KEY). "
+             "Also settable with CERBERUS_USE_LLM_REPRO=1. Default is the offline scripted test.",
+    )
 
     args = parser.parse_args()
     run_pipeline(
@@ -528,5 +577,6 @@ if __name__ == "__main__":
         dry_run=args.dry_run,
         mode=args.mode,
         use_llm=args.use_llm,
+        use_llm_repro=args.use_llm_repro,
     )
 
