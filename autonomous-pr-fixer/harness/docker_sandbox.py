@@ -140,6 +140,10 @@ class Sandbox:
                     f"{os.path.abspath(self.workspace_dir)}:/workspace",
                     "-w",
                     "/workspace",
+                    "-e",
+                    "PYTHONDONTWRITEBYTECODE=1",
+                    "-e",
+                    "PYTHONUNBUFFERED=1",
                 ]
                 if self.network_disabled:
                     cmd.extend(["--network", "none"])
@@ -208,6 +212,7 @@ class Sandbox:
             merged_env = os.environ.copy()
             merged_env.update(self.env)
             merged_env["PYTHONUNBUFFERED"] = "1"
+            merged_env["PYTHONDONTWRITEBYTECODE"] = "1"
             proc = None
             try:
                 proc = subprocess.Popen(
@@ -218,6 +223,7 @@ class Sandbox:
                     stderr=subprocess.PIPE,
                     text=True,
                     env=merged_env,
+                    start_new_session=(os.name != "nt"),
                 )
                 stdout, stderr = proc.communicate(timeout=effective_timeout)
                 return ExecResult(
