@@ -150,10 +150,30 @@ class Sandbox:
                 cmd.extend([self.requested_image, "tail", "-f", "/dev/null"])
                 proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 if proc.returncode == 0 and proc.stdout.strip():
-                    self.container_id = proc.stdout.strip()[:12]
-                    self.is_docker = True
-                    self.is_alive = True
-                    return
+                    container_id = proc.stdout.strip()[:12]
+                    runtime_check = subprocess.run(
+                        [
+                            "docker",
+                            "exec",
+                            container_id,
+                            "sh",
+                            "-c",
+                            "python -c 'import pytest' && git --version",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+                    if runtime_check.returncode == 0:
+                        self.container_id = container_id
+                        self.is_docker = True
+                        self.is_alive = True
+                        return
+                    subprocess.run(
+                        ["docker", "rm", "-f", container_id],
+                        capture_output=True,
+                        timeout=10,
+                    )
             except Exception:
                 pass
 
