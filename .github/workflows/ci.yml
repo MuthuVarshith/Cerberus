@@ -1,0 +1,61 @@
+name: CI
+
+# GitHub Actions discovers workflows only at the repository root. The project
+# itself lives in autonomous-pr-fixer/, so each run step uses that directory.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+defaults:
+  run:
+    working-directory: autonomous-pr-fixer
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: autonomous-pr-fixer/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
+        # No secrets required: GitHub integration is exercised via dry-run paths.
+
+  secret-audit:
+    name: Hard-coded secret audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Scan for common secret patterns
+        shell: bash
+        run: |
+          echo "Scanning for common secret patterns..."
+          if grep -RInE \
+            --exclude-dir=.git \
+            --exclude-dir=tests \
+            --include='*.py' \
+            '(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{20,})' \
+            autonomous-pr-fixer; then
+            echo "ERROR: Possible hard-coded secrets found!"
+            exit 1
+          fi
+          echo "No production token-shaped secrets detected."
