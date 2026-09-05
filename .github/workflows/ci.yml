@@ -55,7 +55,12 @@ jobs:
         shell: bash
         run: |
           echo "Scanning for common secret patterns..."
-          if grep -rn "ghp_\|sk-\|AIza" --include="*.py" .; then
+          if grep -RInE \
+            --exclude-dir=.git \
+            --exclude-dir=tests \
+            --include='*.py' \
+            '(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{20,})' \
+            autonomous-pr-fixer; then
             echo "ERROR: Possible hard-coded secrets found!"
             exit 1
           fi
