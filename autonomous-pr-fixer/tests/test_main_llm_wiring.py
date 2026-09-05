@@ -160,3 +160,45 @@ def test_explicit_false_beats_the_env_var(constructed, recorded_publishes, monke
         is True
     )
     assert constructed == []
+
+
+def test_llm_repro_is_off_by_default(tmp_path, monkeypatch):
+    """Reproduction test synthesis is scripted by default."""
+    repro_constructed = []
+
+    def _fake_synth(**kwargs):
+        repro_constructed.append(kwargs)
+        raise AssertionError("Should not be called")
+
+    monkeypatch.setattr(main, "LLMReproductionSynthesizer", _fake_synth)
+    assert main.run_pipeline(repo_dir=str(tmp_path), mode="local", **ISSUE_KWARGS) is True
+    assert repro_constructed == []
+
+
+def test_llm_repro_drives_synthesizer_when_enabled(tmp_path, monkeypatch, recorded_publishes):
+    """When enabled, LLMReproductionSynthesizer generates test_reproduce.py."""
+    monkeypatch.setattr(main, "has_api_key", lambda: True)
+    repro_calls = []
+
+    class _MockSynth:
+        def __init__(self, **kwargs):
+            repro_calls.append(kwargs)
+            self.model = "mock-model"
+            self.usage = type("Usage", (), {"total_tokens": 150})()
+
+        def synthesize_and_verify(self, max_attempts=3):
+            # Write a valid failing reproduction test directly
+            test_code = "from rate_calculator import calculate_rate\ndef test_fail(): assert calculate_rate(10, 0) == 0.0\n"
+            repro_agent = main.ReproductionAgent(repro_calls[-1]["sandbox"])
+            return repro_agent.run_reproduction_gate("Title", "Body", test_code)
+
+    monkeypatch.setattr(main, "LLMReproductionSynthesizer", _MockSynth)
+
+    assert (
+        main.run_pipeline(
+            repo_dir=str(tmp_path), mode="local", use_llm_repro=True, **ISSUE_KWARGS
+        )
+        is True
+    )
+    assert len(repro_calls) == 1
+

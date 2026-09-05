@@ -85,7 +85,7 @@ CONFIGS: List[GateConfig] = [
     GateConfig("(1) Baseline (Free Loop)", red_gate=False, blast_radius=False, regression=False),
     GateConfig("(2) + RED Gate", red_gate=True, blast_radius=False, regression=False),
     GateConfig("(3) + RED Gate + Blast Radius", red_gate=True, blast_radius=True, regression=False),
-    GateConfig("(4) Full Harness (All 3 Gates)", red_gate=True, blast_radius=True, regression=True),
+    GateConfig("(4) Full Harness (All 4 Gates)", red_gate=True, blast_radius=True, regression=True),
 ]
 
 
