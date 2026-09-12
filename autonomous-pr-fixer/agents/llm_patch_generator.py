@@ -81,12 +81,18 @@ def resolve_model(explicit: Optional[str] = None) -> str:
         return DEFAULT_ANTHROPIC_MODEL
     if os.environ.get("OPENAI_API_KEY"):
         return DEFAULT_OPENAI_MODEL
+    if os.environ.get("GEMINI_API_KEY"):
+        return "gemini/gemini-3.6-flash"
     return DEFAULT_ANTHROPIC_MODEL
 
 
 def has_api_key() -> bool:
     """Whether any provider credential is present, so a caller can pick a generator."""
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY"))
+    return bool(
+        os.environ.get("ANTHROPIC_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("GEMINI_API_KEY")
+    )
 
 
 class ScriptedPatchGenerator:

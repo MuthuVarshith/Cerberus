@@ -205,6 +205,7 @@ A minimal reproduction test was synthesized and verified to **FAIL** on the unpa
         branch_name: str,
         pr_body: str,
         dry_run: bool = True,
+        fork_owner: Optional[str] = None,
     ) -> Dict[str, Any]:
         pr_title = f"fix(autobot): resolve issue #{issue_number} - {issue_title[:50]}"
 
@@ -228,8 +229,16 @@ A minimal reproduction test was synthesized and verified to **FAIL** on the unpa
             }
 
         safe_branch = sanitize_ref(branch_name)
-        clean_remote = f"https://github.com/{repo_slug}.git"
-        auth_url = f"https://x-access-token:{self.token}@github.com/{repo_slug}.git"
+        
+        if fork_owner:
+            push_repo_slug = f"{fork_owner}/{repo_slug.split('/')[-1]}"
+            pr_head = f"{fork_owner}:{safe_branch}"
+        else:
+            push_repo_slug = repo_slug
+            pr_head = safe_branch
+
+        clean_remote = f"https://github.com/{push_repo_slug}.git"
+        auth_url = f"https://x-access-token:{self.token}@github.com/{push_repo_slug}.git"
 
         # The stored remote is the *clean* URL. Pushing to an explicit authenticated
         # URL keeps the token out of the sandbox's .git/config, which otherwise
@@ -273,7 +282,7 @@ A minimal reproduction test was synthesized and verified to **FAIL** on the unpa
         payload = {
             "title": pr_title,
             "body": pr_body,
-            "head": safe_branch,
+            "head": pr_head,
             # Repositories disagree on the default branch name, and a wrong base
             # makes the API reject the PR after the push already succeeded.
             "base": os.environ.get("GITHUB_BASE_BRANCH", "main"),
