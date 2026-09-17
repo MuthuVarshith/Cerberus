@@ -126,7 +126,10 @@ def test_patch_that_does_not_fix_the_bug_is_refused(tmp_path, _isolated_run_arti
     useless = _diff("return amount / total", "return (amount / total)")
     admitted, _ = _run_demo(tmp_path, patch_generator=ScriptedPatchGenerator([useless]))
     assert admitted is False
-    assert _single_artifact(_isolated_run_artifacts)["refusal"]["code"] == "GREEN_NOT_REACHED"
+    refusal = _single_artifact(_isolated_run_artifacts)["refusal"]
+    assert refusal["code"] == "GREEN_NOT_REACHED"
+    # One readable line naming how the last attempt failed, not a raw output tail.
+    assert "Last attempt: FAIL: ZeroDivisionError." in refusal["message"] and "\n" not in refusal["message"]
 
 
 def test_patch_that_breaks_regression_is_refused(tmp_path, _isolated_run_artifacts):

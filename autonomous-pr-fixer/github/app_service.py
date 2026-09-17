@@ -373,6 +373,8 @@ class CerberusApp:
 
         env = host_unsafe_environment()
         env["RUN_ARTIFACTS_DIR"] = self.settings.artifacts_dir
+        # A run killed at the timeout cannot clean up; its containers stop themselves soon after.
+        env["CERBERUS_SANDBOX_MAX_LIFETIME_SECONDS"] = str(self.settings.run_timeout_seconds + 300)
         if os.environ.get("CERBERUS_SANDBOX"):
             env["CERBERUS_SANDBOX"] = os.environ["CERBERUS_SANDBOX"]
         for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "CERBERUS_MODEL", "CERBERUS_SANDBOX_IMAGE"):

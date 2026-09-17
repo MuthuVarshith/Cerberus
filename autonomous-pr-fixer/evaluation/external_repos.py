@@ -120,7 +120,7 @@ def run_variant(bug: Dict[str, Any], variant: Dict[str, Any], workdir: str, inpu
         "newly_failing": regression.get("newly_failing") or [],
         "test_files_run_at_base": regression.get("test_files_run_at_base") or [],
         "changed_files": (record.get("blast_radius") or {}).get("changed_files") or [],
-        "refusal_detail": (refusal.get("message") or refusal.get("detail") or "")[:300],
+        "refusal_detail": " ".join((refusal.get("message") or "").split())[:300],
     }
 
 

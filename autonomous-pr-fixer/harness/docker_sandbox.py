@@ -54,14 +54,23 @@ HARNESS_DIR = ".cerberus"
 
 CONTAINER_WORKDIR = "/workspace"
 
+#: A container whose host process was killed (a worker timeout, a hard interrupt) is
+#: never destroyed by it; PID 1 exits after this long and `--rm` removes it.
+DEFAULT_MAX_LIFETIME_SECONDS = 4 * 60 * 60
+CONTAINER_LABEL = "cerberus.sandbox=true"
+
 #: PID 1 of every container: reaps orphaned processes, so processes killed after a
-#: command do not linger as zombies that count against the PID limit.
+#: command do not linger as zombies that count against the PID limit, and exits
+#: (stopping the container) once the lifetime in argv[1] has passed.
 _REAPER = (
-    "import os, time\n"
-    "while True:\n"
+    "import os, sys, time\n"
+    "deadline = time.monotonic() + float(sys.argv[1])\n"
+    "while time.monotonic() < deadline:\n"
     "    try:\n"
-    "        os.waitpid(-1, 0)\n"
+    "        pid, _ = os.waitpid(-1, os.WNOHANG)\n"
     "    except ChildProcessError:\n"
+    "        pid = 0\n"
+    "    if not pid:\n"
     "        time.sleep(0.5)\n"
 )
 
@@ -141,6 +150,20 @@ def resolve_isolation(explicit: Optional[str] = None) -> str:
     return mode
 
 
+def _resolve_lifetime(explicit: Optional[int]) -> int:
+    """Explicit argument, then CERBERUS_SANDBOX_MAX_LIFETIME_SECONDS, then the default."""
+    raw = explicit if explicit is not None else os.environ.get("CERBERUS_SANDBOX_MAX_LIFETIME_SECONDS", "")
+    if raw == "":
+        return DEFAULT_MAX_LIFETIME_SECONDS
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = 0
+    if value <= 0:
+        raise SandboxError(f"Invalid sandbox lifetime {raw!r}; expected a positive number of seconds.")
+    return value
+
+
 def host_unsafe_environment(source: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     """Environment for host-unsafe commands: allowlisted, and never a secret."""
     source = os.environ if source is None else source
@@ -203,8 +226,10 @@ class Sandbox:
         cpus: str = "2",
         pids_limit: int = 256,
         base_ref: Optional[str] = None,
+        max_lifetime_sec: Optional[int] = None,
     ):
         self.isolation = resolve_isolation(isolation)
+        self.max_lifetime_sec = _resolve_lifetime(max_lifetime_sec)
         self.image = image or os.environ.get("CERBERUS_SANDBOX_IMAGE", "") or DEFAULT_IMAGE
         self.timeout_sec = timeout_sec
         self.memory = memory
@@ -388,8 +413,9 @@ class Sandbox:
     def container_args(self, image: str, network: str, name: str) -> List[str]:
         """`docker run` arguments for a sandbox container."""
         return [
-            "run", "-d",
+            "run", "-d", "--rm",
             "--name", name,
+            "--label", CONTAINER_LABEL,
             "--network", network,
             "--memory", self.memory,
             "--memory-swap", self.memory,
@@ -405,7 +431,7 @@ class Sandbox:
             "-v", f"{os.path.abspath(self.workspace_dir)}:{CONTAINER_WORKDIR}",
             "-w", CONTAINER_WORKDIR,
             image,
-            CONTAINER_PYTHON, "-c", _REAPER,
+            CONTAINER_PYTHON, "-c", _REAPER, str(self.max_lifetime_sec),
         ]
 
     def _prepare_mount(self) -> None:

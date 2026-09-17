@@ -139,7 +139,21 @@ def test_repair_container_is_isolated_and_carries_no_host_secrets(docker_env, mo
     # Timeout and command are positional arguments, never spliced into the wrapper.
     assert exec_call[-2:] == ["7", "python -m pytest -q"]
     assert run[run.index("cerberus-sandbox:py3.11") + 1:][:2] == ["python", "-c"]
+    # An orphaned container stops itself after its lifetime and --rm removes it.
+    assert "--rm" in run and run[run.index("--label") + 1] == "cerberus.sandbox=true"
+    assert run[-1] == str(ds.DEFAULT_MAX_LIFETIME_SECONDS)
     assert any(c[:2] == ["rm", "-f"] for c in docker_env.calls)
+
+
+def test_container_lifetime_is_configurable_and_validated(docker_env, monkeypatch):
+    monkeypatch.setenv("CERBERUS_SANDBOX_MAX_LIFETIME_SECONDS", "1200")
+    with Sandbox() as sb:
+        sb.exec("true")
+    assert next(c for c in docker_env.calls if c[0] == "run")[-1] == "1200"
+    for bad in ("0", "-5", "soon"):
+        monkeypatch.setenv("CERBERUS_SANDBOX_MAX_LIFETIME_SECONDS", bad)
+        with pytest.raises(ds.SandboxError, match="lifetime"):
+            Sandbox()
 
 
 def test_setup_runs_networked_then_repair_runs_offline(docker_env):

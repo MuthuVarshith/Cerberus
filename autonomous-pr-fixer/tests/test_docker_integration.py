@@ -188,6 +188,21 @@ def test_setup_is_networked_and_its_filesystem_carries_into_the_offline_containe
     assert not os.path.exists(sb._root_dir)
 
 
+def test_orphaned_container_stops_and_removes_itself(tmp_path):
+    """If the process driving a sandbox dies without cleanup, the container does not live forever."""
+    sb = Sandbox(base_dir=_git_repo(tmp_path), isolation="docker", max_lifetime_sec=5)
+    try:
+        assert sb.exec("true").exit_code == 0
+        name = f"cerberus-{sb._run_id}"
+        assert _container_exists(name)
+        deadline = time.time() + 60
+        while _container_exists(name) and time.time() < deadline:
+            time.sleep(1)
+        assert not _container_exists(name)
+    finally:
+        sb.destroy()  # still safe after the container removed itself
+
+
 def test_missing_image_fails_closed(tmp_path):
     with pytest.raises(SandboxUnavailableError):
         Sandbox(base_dir=_git_repo(tmp_path), isolation="docker", image="cerberus-sandbox:does-not-exist")

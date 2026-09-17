@@ -337,11 +337,16 @@ def test_app_refuses_to_run_without_docker(tmp_path, monkeypatch):
 def test_timed_out_run_reports_timed_out(tmp_path):
     scenario, base, head = _pr_repo(tmp_path)
     github = FakeGitHub(pull={"number": 3, "title": "t", "body": "", "base": {"sha": base}, "head": {"sha": head}})
-    app = _app(tmp_path, github, runner=lambda argv, env, timeout, log: (-1, True))
+    seen = []
+    app = _app(tmp_path, github, runner=lambda argv, env, timeout, log: seen.append((env, timeout)) or (-1, True),
+               run_timeout_seconds=900)
     app.repos = LocalRepos(scenario.repo_dir)
 
     app.execute(_job(app, head))
 
+    # A run killed at the timeout cannot remove its containers; they must stop themselves soon after.
+    env, timeout = seen[0]
+    assert timeout == 900 and env["CERBERUS_SANDBOX_MAX_LIFETIME_SECONDS"] == "1200"
     assert github.completed[0]["conclusion"] == "timed_out"
     row = app.store.get_run("app_test")
     assert (row.final_state, row.error) == ("ERROR", "timed out")

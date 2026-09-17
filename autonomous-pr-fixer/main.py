@@ -498,7 +498,11 @@ def _run_in_sandbox(
     if not loop_res.reached_green:
         failures = [h.structured_failure for h in loop_res.history
                     if h.structured_failure and h.structured_failure.status != "ABORT_DUPLICATE_DIFF"]
-        last = f" Last attempt: {failures[-1].status}: {failures[-1].traceback.strip()[-300:]}" if failures else ""
+        last = ""
+        if failures:
+            f = failures[-1]
+            first_line = next((line.strip() for line in f.traceback.splitlines() if line.strip()), "")
+            last = f" Last attempt: {f.status}: {(f.error if f.status == 'FAIL' else first_line)[:200]}."
         return rec.refuse(
             RefusalCode.GREEN_NOT_REACHED, "PATCH_LOOP",
             f"No candidate patch made the reproduction test pass after {loop_res.total_attempts} attempt(s).{last}",
