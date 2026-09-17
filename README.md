@@ -10,6 +10,41 @@ allowed scope. If any check cannot be satisfied or cannot be verified, the run i
 > **Status: research prototype for Python/pytest repositories.** This README describes only what the code in this
 > repository does and what its tests exercise. Progress, decisions and known gaps are tracked in
 > [`CERBERUS_PROGRESS.md`](CERBERUS_PROGRESS.md).
+>
+> Also here: [`DEMO.md`](DEMO.md) (recording script), [`INTERVIEW.md`](INTERVIEW.md) (technical Q&A),
+> [`PORTFOLIO.md`](PORTFOLIO.md) (summary), and [`site/index.html`](site/index.html) — a standalone summary page
+> (open it locally, or serve `site/` with GitHub Pages; it is static and runs nothing).
+
+## The problem
+
+**Agents write patches; Cerberus decides whether a patch has earned a PR.**
+
+A coding agent can produce a plausible diff for almost any bug report in seconds. The expensive part is not writing
+the patch — it is deciding whether the patch deserves a human's attention. An agent judging its own work is the
+weakest possible evidence: it chose the change, it chose which tests to run, and "the test I wrote passes" says
+nothing about the tests that already existed.
+
+Cerberus is the reviewer's side of that exchange. It never writes the fix. It takes a patch from wherever it came
+from — a person, a script, a coding agent, a model — runs it against evidence the patch's author does not control,
+and produces one of three outcomes with a reason attached: `ADMITTED`, `REFUSED` with a code, or `ERROR`. The
+strongest claim it makes is "these gates found this evidence", which is why refusals are as interesting as
+admissions.
+
+```text
+bug report + reproduction test          patch (person / script / coding agent / model)
+                   │                                    │
+                   ▼                                    ▼
+   ┌───────────────────────────────────────────────────────────────┐
+   │  TRIAGE → SETUP (only networked phase) → RED ×3 → BASELINE    │
+   │     → LOCALIZATION → apply patch → GREEN ×3 → REGRESSION      │
+   │     → SCOPE → ADMISSION                                       │
+   │  everything after SETUP runs offline in a Docker container    │
+   └───────────────────────────────────────────────────────────────┘
+                   │
+                   ▼
+     ADMITTED → draft PR / Check Run      REFUSED (code) / ERROR
+     evidence: artifacts/<run_id>/run.json
+```
 
 ## The gates
 
@@ -285,6 +320,18 @@ Docker engine prompted a review that found host-side harness file access followe
 fixed and covered by tests. Three bugs chosen
 for fast suites are a smoke test on foreign code, not a representative sample.
 
+### Real coding agents
+
+**Not yet done.** The `--agent claude-code` path is exercised only by a scripted stand-in agent in the test suite
+(`tests/test_patch_sources.py`), which produces edits the same way a real agent would but without a model. A run
+against a real headless Claude Code session needs an authenticated CLI on the machine
+(`claude` → `/login`); on this development machine `claude -p` answers `Not logged in`, so no such run has happened
+and nothing in this repository claims otherwise. The intended command, once logged in, is in [`DEMO.md`](DEMO.md).
+
+What such a run would and would not prove: it would show that a patch written by an agent with no access to the
+verifier survives (or fails) the same gates as a human patch. It would not make the gates stronger — a plausible but
+semantically wrong agent patch that passes every visible test is admitted, exactly as the benchmark measures.
+
 The older smoke runner (`python evaluation/smoke_runner.py`) still exercises five scripted scenarios.
 
 ## Known limitations
@@ -322,6 +369,21 @@ autonomous-pr-fixer/
 ├── evaluation/      benchmark runner, external-repository runner and cases, smoke scenarios, metrics reporter
 └── tests/
 ```
+
+## Future work
+
+In the order the evidence argues for, not the order that is most fun to build:
+
+1. **Run a real coding agent through the gate** (above) and record what it produces.
+2. **Exercise the Docker sandbox on a Linux host**, where the symlink and permission defences actually bite.
+3. **Install the GitHub App on a real repository.** The App is written and tested against a fake API; the first real
+   installation will find things a fake cannot.
+4. **Let the App verify PRs that append a test to an existing file** — the shape of most real fixes. The CLI already
+   does this; the App still insists on exactly one new test file.
+5. **A larger, less biased evaluation set.** 24 author-written instances and three external bugs are enough to show
+   the gates behave as designed, not enough to estimate how often they help.
+6. **Measure repair quality** (`Phase 3` in [`CERBERUS_PROGRESS.md`](CERBERUS_PROGRESS.md)) only after the above:
+   improving a repair loop before verification is trustworthy optimises the wrong end of the system.
 
 ## CI
 

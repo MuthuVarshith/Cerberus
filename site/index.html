@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cerberus Verification Gate</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --paper: #edf1ed;
+    --card: #f8faf7;
+    --ink: #101a15;
+    --muted: #55665d;
+    --rule: #d2dbd4;
+    --admit: #0c6a58;
+    --admit-wash: #dbeae4;
+    --refuse: #9d4c0d;
+    --refuse-wash: #f2e3d4;
+    --term-bg: #10201b;
+    --term-ink: #cfe3d9;
+    --shadow: 0 1px 0 rgba(16, 26, 21, .06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0b100e;
+      --card: #131b17;
+      --ink: #e6ede8;
+      --muted: #91a399;
+      --rule: #232f28;
+      --admit: #52c4a8;
+      --admit-wash: #14261f;
+      --refuse: #dd9247;
+      --refuse-wash: #2a1f14;
+      --term-bg: #060c0a;
+      --term-ink: #bcd6ca;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0b100e;
+    --card: #131b17;
+    --ink: #e6ede8;
+    --muted: #91a399;
+    --rule: #232f28;
+    --admit: #52c4a8;
+    --admit-wash: #14261f;
+    --refuse: #dd9247;
+    --refuse-wash: #2a1f14;
+    --term-bg: #060c0a;
+    --term-ink: #bcd6ca;
+    --shadow: none;
+  }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    padding-inline: 16px;
+    padding-block: 0 72px;
+  }
+  main { max-width: 940px; margin: 0 auto; }
+  section { max-width: 68ch; }
+  section.wide { max-width: 940px; }
+  h1, h2, h3 { text-wrap: balance; letter-spacing: -.015em; margin: 0; }
+  h1 { font-size: clamp(2.1rem, 6vw, 3.1rem); font-weight: 600; line-height: 1.08; }
+  h2 { font-size: 1.32rem; font-weight: 600; margin-block: 56px 14px; }
+  h3 { font-size: 1rem; font-weight: 600; margin-block: 26px 6px; }
+  p { margin: 0 0 14px; }
+  a { color: var(--admit); }
+  code, .mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+  code { font-size: .88em; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace; font-size: .72rem; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 18px;
+  }
+  header { padding-block: 64px 8px; border-bottom: 1px solid var(--rule); }
+  .thesis {
+    font-size: 1.16rem; line-height: 1.5; margin-block: 22px 26px; max-width: 34ch;
+    border-left: 3px solid var(--admit); padding-left: 16px;
+  }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: "IBM Plex Mono", monospace;
+          font-size: .78rem; color: var(--muted); margin-bottom: 28px; }
+
+  /* pipeline */
+  .pipeline { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; margin-block: 8px 10px; }
+  .stage {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 2px;
+    padding: 7px 11px; font-family: "IBM Plex Mono", monospace; font-size: .76rem;
+    display: flex; gap: 8px; align-items: baseline; box-shadow: var(--shadow);
+  }
+  .stage b { font-weight: 500; }
+  .stage span { color: var(--muted); font-size: .72rem; }
+  .stage.key { border-color: var(--admit); }
+  .verdicts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .verdict {
+    font-family: "IBM Plex Mono", monospace; font-size: .76rem; padding: 6px 10px; border-radius: 2px;
+  }
+  .verdict.a { background: var(--admit-wash); color: var(--admit); border: 1px solid var(--admit); }
+  .verdict.r { background: var(--refuse-wash); color: var(--refuse); border: 1px solid var(--refuse); }
+  .verdict.e { background: var(--card); color: var(--muted); border: 1px solid var(--rule); }
+
+  pre {
+    background: var(--term-bg); color: var(--term-ink); border-radius: 3px;
+    padding: 16px 18px; overflow-x: auto; font-family: "IBM Plex Mono", monospace;
+    font-size: .8rem; line-height: 1.62; margin: 0;
+  }
+  pre .ok { color: #5fcfae; }
+  pre .no { color: #e6a45c; }
+  pre .dim { color: #7d968b; }
+  figcaption { color: var(--muted); font-size: .84rem; margin-top: 8px; }
+  figure { margin: 0; }
+
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-family: "IBM Plex Mono", monospace; font-size: .74rem; letter-spacing: .07em;
+       text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; padding-right: 0; }
+  td.code { font-family: "IBM Plex Mono", monospace; font-size: .82rem; white-space: nowrap; }
+
+  .callout {
+    background: var(--refuse-wash); border-left: 3px solid var(--refuse);
+    padding: 16px 18px; margin-block: 18px; border-radius: 0 2px 2px 0;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout strong { color: var(--refuse); }
+
+  ul { margin: 0 0 14px; padding-left: 20px; }
+  li { margin-bottom: 7px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-block: 16px; }
+  .grid div { background: var(--card); border: 1px solid var(--rule); border-radius: 2px; padding: 14px 16px; box-shadow: var(--shadow); }
+  .grid dt { font-family: "IBM Plex Mono", monospace; font-size: .72rem; letter-spacing: .09em;
+             text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .grid dd { margin: 0; font-size: 1.9rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .grid dd small { display: block; font-size: .82rem; font-weight: 400; color: var(--muted); margin-top: 5px; line-height: 1.45; }
+  footer { margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--rule); color: var(--muted); font-size: .86rem; }
+</style>
+</head>
+<body>
+
+<main>
+  <header>
+    <p class="eyebrow">Verification gate · Python / pytest · research prototype</p>
+    <h1>Cerberus</h1>
+    <p class="thesis">Agents write patches. Cerberus decides whether a patch has earned a pull request.</p>
+    <div class="meta">
+      <span>231 tests</span><span>24-case benchmark</span><span>3 external repositories</span>
+      <span><a href="https://github.com/MuthuVarshith/Cerberus">github.com/MuthuVarshith/Cerberus</a></span>
+    </div>
+  </header>
+
+  <section>
+    <h2>What it does</h2>
+    <p>
+      A coding agent can produce a plausible diff for almost any bug report in seconds. The bottleneck is not writing
+      the patch — it is deciding whether it deserves a reviewer's attention. An agent judging its own work is the
+      weakest possible evidence: it chose the change, it chose which tests to run, and “the test I wrote passes” says
+      nothing about the tests that already existed.
+    </p>
+    <p>
+      Cerberus never writes the fix. It takes a patch from wherever it came from — a person, a script, a coding agent,
+      a model — runs it against evidence the patch's author does not control, and ends in exactly one state.
+    </p>
+    <div class="verdicts">
+      <span class="verdict a">ADMITTED</span>
+      <span class="verdict r">REFUSED · <span class="mono">code names the gate</span></span>
+      <span class="verdict e">ERROR · fails closed</span>
+    </div>
+  </section>
+
+  <section class="wide">
+    <h2>The pipeline</h2>
+    <div class="pipeline">
+      <div class="stage"><b>TRIAGE</b></div>
+      <div class="stage"><b>SETUP</b><span>only networked phase</span></div>
+      <div class="stage key"><b>RED</b><span>×3, right reason</span></div>
+      <div class="stage key"><b>BASELINE</b><span>before the patch</span></div>
+      <div class="stage"><b>LOCALIZE</b></div>
+      <div class="stage key"><b>GREEN</b><span>×3, unmodified test</span></div>
+      <div class="stage key"><b>REGRESSION</b><span>by test id</span></div>
+      <div class="stage key"><b>SCOPE</b><span>measured, not claimed</span></div>
+      <div class="stage"><b>ADMISSION</b></div>
+    </div>
+    <p style="color: var(--muted); font-size: .9rem; max-width: 68ch;">
+      Everything after dependency installation runs offline in a container. All outcomes come from JUnit XML — an
+      unreadable result is a refusal, never a pass.
+    </p>
+  </section>
+
+  <section class="wide">
+    <h2>A real run</h2>
+    <figure>
+<pre><span class="dim">$ python main.py --demo</span>
+
+[3/9] REPRODUCTION / RED GATE
+  <span class="ok">[OK]</span> RED confirmed in 3/3 runs: test_zero_total_returns_zero (ZeroDivisionError)
+[4/9] BASELINE
+  <span class="ok">[OK]</span> 2 tests, 0 already failing
+[6/9] PATCH LOOP / GREEN GATE
+  <span class="ok">[OK]</span> GREEN confirmed in 3/3 runs
+[7/9] REGRESSION
+  -&gt; 2/2 passing; newly failing 0, pre-existing 0, flaky 0
+[8/9] SCOPE
+  -&gt; files ['rate_calculator.py'] (+2/-0); symbols ['rate_calculator.py::calculate_rate']
+[9/9] ADMISSION
+  [GATE 1: PASS] Reproduction test passes with the patch (attempt 1).
+  [GATE 2: PASS] No new test failures relative to baseline (2/2 passing).
+  [GATE 3: PASS] Scope acceptable: 1 file(s) changed (+2/-0), none outside the allowed scope.
+  [GATE 4: PASS] Non-empty change against the base commit (+2/-0).
+
+Final state: <span class="ok">ADMITTED</span>
+Run artifact: artifacts/demo_admitted/run.json</pre>
+      <figcaption>Every run writes <code>run.json</code>: base commit SHA, reproduction test and output, per-attempt
+        patch history, sandbox mode, and the gate-by-gate decision.</figcaption>
+    </figure>
+  </section>
+
+  <section class="wide">
+    <h2>Measured against an ungated baseline</h2>
+    <p style="max-width: 68ch;">
+      24 seeded instances over three small libraries, with hidden specification tests as ground truth that the gate
+      never sees. The baseline is measured, not stipulated: admit whenever the reproduction test passes — what an
+      agent that trusts itself does.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Metric</th><th class="num">Cerberus</th><th class="num">Ungated baseline</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Patches admitted</td><td class="num">11</td><td class="num">20</td></tr>
+          <tr><td>Admitted but should have been refused</td><td class="num">4 (36%)</td><td class="num">13 (65%)</td></tr>
+          <tr><td>Admitted code failing hidden tests</td><td class="num">4</td><td class="num">7</td></tr>
+          <tr><td>Correct fixes admitted</td><td class="num">7 of 7</td><td class="num">7 of 7</td></tr>
+          <tr><td>Rejection accuracy</td><td class="num">12 of 17</td><td class="num">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <p><strong>Four of the eleven admissions were wrong.</strong> They are plausible-but-wrong patches that fix the
+        reported symptom and pass every visible test, including the reproduction test, while failing hidden tests.</p>
+      <p>No amount of gate engineering closes that: visible tests define the visible contract. Cerberus removes the
+        mistakes tests can see — regressions, scope creep, weakened tests, reproductions that never reproduced the bug
+        — and cannot remove the ones they cannot. Measuring it was the point; hiding it would make the project
+        worthless.</p>
+    </div>
+  </section>
+
+  <section class="wide">
+    <h2>Run against code I did not write</h2>
+    <p style="max-width: 68ch;">
+      Three real bugs in open-source projects, each pinned to its upstream fix commit; the reproduction test is the
+      test that commit added. <strong>11 of 11</strong> runs ended in the expected state and refusal code.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Repository</th><th>Case</th><th class="num">Suite</th><th>Verdict</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>sqlparse <span class="mono" style="color:var(--muted)">f66d12c</span></td><td>upstream fix, and the unmodified upstream commit</td><td class="num">492</td><td class="code" style="color:var(--admit)">ADMITTED</td></tr>
+          <tr><td>sqlparse</td><td>fix that also strips identifier quoting</td><td class="num">492</td><td class="code" style="color:var(--refuse)">REGRESSION</td></tr>
+          <tr><td>sqlparse</td><td>same patch, plus edits to the 3 tests it breaks</td><td class="num">492</td><td class="code" style="color:var(--refuse)">SCOPE_VIOLATION</td></tr>
+          <tr><td>boltons <span class="mono" style="color:var(--muted)">ead236e</span></td><td>upstream fix, and the unmodified upstream commit</td><td class="num">445</td><td class="code" style="color:var(--admit)">ADMITTED</td></tr>
+          <tr><td>boltons</td><td>incomplete fix</td><td class="num">445</td><td class="code" style="color:var(--refuse)">GREEN_NOT_REACHED</td></tr>
+          <tr><td>more-itertools <span class="mono" style="color:var(--muted)">cca3294</span></td><td>upstream fix, and the unmodified upstream commit</td><td class="num">679</td><td class="code" style="color:var(--admit)">ADMITTED</td></tr>
+          <tr><td>more-itertools</td><td>reproduction test with a non-existent import</td><td class="num">679</td><td class="code" style="color:var(--refuse)">RED_INVALID_TEST</td></tr>
+          <tr><td>more-itertools</td><td>test that already passes on the buggy code</td><td class="num">679</td><td class="code" style="color:var(--refuse)">RED_NOT_FAILING</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="max-width: 68ch; margin-top: 16px;">
+      Testing against foreign code found two defects my own fixtures could not: real fixes append their test to an
+      existing test file, which the scope gate refused outright; and a diff whose last context line is an empty source
+      line was corrupted before <code>git apply</code>. Both are fixed, with tests that fail against the old code.
+    </p>
+  </section>
+
+  <section class="wide">
+    <h2>Refusals are the interesting half</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="code">RED_NOT_FAILING</td><td>the reproduction test passes on the unpatched code, so it never reproduced the bug</td></tr>
+          <tr><td class="code">RED_WRONG_REASON</td><td>it fails, but not for the failure the issue describes</td></tr>
+          <tr><td class="code">RED_INVALID_TEST</td><td>an import, syntax or collection error — not a reproduction</td></tr>
+          <tr><td class="code">RED_NONDETERMINISTIC</td><td>the three runs disagreed</td></tr>
+          <tr><td class="code">GREEN_NOT_REACHED</td><td>no candidate made the unmodified test pass; the last failure is named</td></tr>
+          <tr><td class="code">REPRODUCTION_TEST_TAMPERED</td><td>the test's SHA-256 changed between RED and GREEN</td></tr>
+          <tr><td class="code">REGRESSION</td><td>a test that passed at baseline now fails, errors, or no longer runs</td></tr>
+          <tr><td class="code">REGRESSION_UNVERIFIABLE</td><td>results after the patch could not be read — never treated as a pass</td></tr>
+          <tr><td class="code">SCOPE_VIOLATION</td><td>files outside scope, limits exceeded, or existing test lines changed</td></tr>
+          <tr><td class="code">EMPTY_PATCH</td><td>GREEN claimed, but nothing changed against the base commit</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Security model</h2>
+    <p>Untrusted repository code runs, so the sandbox is the product as much as the gates are.</p>
+    <ul>
+      <li><strong>Two phases.</strong> Dependency installation runs in a networked container that is committed to an
+        image; everything after runs offline — <code>--network none</code>, all capabilities dropped,
+        <code>no-new-privileges</code>, memory / CPU / PID limits, tmpfs <code>/tmp</code>, in-container kill timeout.</li>
+      <li><strong>Fails closed.</strong> No Docker, no daemon, no image → the run ends in <code>ERROR</code>. There is
+        no host fallback.</li>
+      <li><strong>No credentials cross the boundary.</strong> The container receives four fixed variables; a test
+        plants a secret in the host environment and asserts it never appears inside. The GitHub token never enters the
+        sandbox, argv, or a remote URL.</li>
+      <li><strong>The host never follows a workspace symlink.</strong> A committed link, or one created by code in the
+        container, would otherwise redirect a harness write outside the workspace on Linux and macOS.</li>
+      <li><strong>No process outlives its command</strong>, and a container orphaned by a killed process stops and
+        removes itself.</li>
+      <li><strong>Cerberus never merges.</strong> It opens draft pull requests, or reports a Check Run.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Not production-ready</h2>
+    <ul>
+      <li>Four of eleven benchmark admissions were wrong — a limit of test-based verification, not a missing feature.</li>
+      <li>The Docker path has run on Windows only; the symlink and permission defences matter most on Linux, where
+        they are covered by unit tests run inside a container rather than by a Linux host.</li>
+      <li>The GitHub App is written and tested against a fake GitHub API, never installed on a real repository.</li>
+      <li>No real coding agent has been run through the gate yet; the adapter is exercised by a scripted stand-in.</li>
+      <li>24 author-written instances and three external bugs show the gates behave as designed — not how often they
+        would help on real projects.</li>
+      <li>Repository code runs in the same process as the test runner, so a deliberately malicious repository could
+        forge its own results. Cerberus verifies patches to trusted-but-buggy repositories.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>Python 3.11 · pytest · JUnit XML · Docker · Git plumbing · FastAPI · SQLite · GitHub REST + App JWTs.
+      This page is a static summary; it runs nothing and exposes no service.
+      Source: <a href="https://github.com/MuthuVarshith/Cerberus">github.com/MuthuVarshith/Cerberus</a>.</p>
+  </footer>
+</main>
+</body>
+</html>

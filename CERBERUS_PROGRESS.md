@@ -16,7 +16,12 @@ Branch: `cerberus/verification-gate` (one commit per phase; nothing pushed).
 | Evaluation benchmark (built before Phase 3) | Done: v1 frozen, scored |
 | 4 — GitHub App workflow | Done (tested against a fake GitHub API; not installed on a real repository) |
 | Real Docker and external repositories | Done (Docker Desktop on Windows; three open-source repositories) |
+| Portfolio packaging | Done (`DEMO.md`, `INTERVIEW.md`, `PORTFOLIO.md`, static summary page) |
+| Real coding-agent run | Blocked: headless `claude -p` answers `Not logged in` on this machine |
 | 3 — Repair quality | Deferred (see "Phase 3 decision") |
+
+**Implementation frozen** after commit `e394d03` (code) / `371a62b` (records). Later commits are documentation,
+demo material and cleanup only.
 
 ## Phase 0 — completed
 
@@ -198,6 +203,23 @@ of stale AF_UNIX socket files left by a crashed session; the folders holding the
   the host-unsafe v1 record; mean patch attempts 1 (was 1.05 before the attempt-count fix); median wall time 10.0 s,
   p90 13.0 s per instance including container startup.
 
+## Portfolio phase — completed (documentation and demo), one item blocked
+
+- **Documentation:** `DEMO.md` (8–10 minute recording script with verified commands), `INTERVIEW.md` (15 technical
+  answers tied to the implementation), `PORTFOLIO.md` (summary, results, limitations); `README.md` gained the problem
+  statement, a pipeline diagram, the real-agent status and a future-work list.
+- **Static summary page**, kept in the repository as `site/index.html` (open locally or serve `site/` with GitHub
+  Pages) and published as a private Claude artifact: <https://claude.ai/artifact/PrPgtFPsjTYetf8VHrwhsR>. Read-only —
+  no service, no execution, no credentials, no Docker socket. The verifier itself is deliberately not exposed: it
+  runs untrusted repository code and belongs behind the validated sandbox, not behind a public URL. A free
+  spin-down host (Render's free tier and similar) would add nothing a static page does not already give.
+- **Real coding-agent run: blocked, not skipped.** `claude` 2.1.272 is installed and `~/.claude.json` holds an OAuth
+  account, but a headless `claude -p` subprocess answers `Not logged in · Please run /login`, so no real agent run has
+  happened and no result is claimed. The demo script carries the exact command to use once the CLI is authenticated;
+  `evaluation/external/tests/sqlparse-332-reproduce.py` exists so that run is a single command.
+- **Not done under the freeze:** `--run-id` is ignored by `--demo` (documented rather than fixed), and the GitHub App
+  still requires exactly one new test file.
+
 ## Architectural decisions
 
 - **Scripted inputs are caller inputs, not pipeline branches.** Demos and human patches use the same
@@ -240,6 +262,8 @@ of stale AF_UNIX socket files left by a crashed session; the folders holding the
 - The benchmark instances are small, synthetic and author-written; there is no real-world or human-authored bug set.
 - GitHub App PR verification requires the PR to add exactly one new test file, so the common shape of a real fix
   (a test appended to an existing file) is refused by the App; the CLI verifies it with `--base/--head --repro-test`.
+- `--demo` generates its own run id and ignores `--run-id`; the run still prints its artifact path. Left as is under
+  the implementation freeze and documented in `DEMO.md`.
 - Test-file detection uses Python naming conventions (`tests/`, `test_*.py`, `*_test.py`, `conftest.py`).
 - RED relevance is heuristic; a test can pass every rule and still encode wrong behaviour.
 - Regression flake detection re-checks only suspected regressions, once, on the base code.
@@ -263,3 +287,7 @@ of stale AF_UNIX socket files left by a crashed session; the folders holding the
 | 2026-09-17 | Full suite at `e394d03` (real Docker engine for `test_docker_integration.py`) | 231 passed, 5 skipped (symlink tests: no symlink privilege on this Windows account) |
 | 2026-09-17 | `python evaluation/external_repos.py --record` at `e394d03` | 11/11 expected verdicts (6 admitted, 5 refused with the expected codes) |
 | 2026-09-17 | `python evaluation/benchmark.py` (Docker) at `e394d03` (`benchmark/reports/v1-docker.md`) | Same per-instance decisions as the v1 record; mean attempts 1; median 10.0 s, p90 13.0 s |
+| 2026-09-17 | Portfolio phase: full suite with Docker | 231 passed, 5 skipped (9 min 13 s) |
+| 2026-09-17 | Portfolio phase: `python main.py --demo` (Docker) | `ADMITTED`; artifact `artifacts/run_b9b0f21bfd/run.json` |
+| 2026-09-17 | Portfolio phase: `python evaluation/external_repos.py --only sqlparse-332` | 4 of 4 expected verdicts, 2 min 49 s including the clone |
+| 2026-09-17 | Portfolio phase: headless `claude -p` probe | `Not logged in · Please run /login` — real coding-agent run not attempted |
