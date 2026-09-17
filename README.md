@@ -19,7 +19,7 @@ allowed scope. If any check cannot be satisfied or cannot be verified, the run i
 | **Baseline** | The repository's pytest command produces a readable JUnit report on the unpatched commit. | test count, already-failing test IDs |
 | **GREEN** | With the patch, the unmodified reproduction test passes in 3 of 3 runs, with no failures, errors or skips. A modified reproduction test is refused. | attempts, per-attempt failures |
 | **Regression** | No test that passed at baseline now fails, errors, or stops running. Failures that already existed at baseline are reported, not counted. Suspected regressions are re-run on the base code; tests that fail there too are reported as flaky. Unreadable results are refused, never passed. | newly failing, pre-existing, flaky |
-| **Scope** | No existing test file is modified or deleted (unless the repository allows it); every changed file — including newly created and deleted files — is inside the allowed scope (the localized file, or `.cerberus.yml` globs); at most 3 files and 200 changed lines by default. | files, new/deleted files, modified test files, lines, changed Python functions/classes |
+| **Scope** | No line of an existing test file is changed or deleted, and no `conftest.py` is touched (unless the repository allows it); every changed file — including newly created and deleted files — is inside the allowed scope (the localized file, or `.cerberus.yml` globs); at most 3 files and 200 changed lines by default. Tests *added* to an existing test file are allowed: the regression gate runs that file in its base form, so added lines (a skip marker, an early `return`) cannot change how existing tests judge the patch. | files, new/deleted files, modified and extended test files, lines, changed Python functions/classes |
 | **Admission** | GREEN, regression, scope, and a non-whitespace change against the base commit all hold. | decision and reasons |
 
 Every run ends in exactly one terminal state — `ADMITTED`, `REFUSED` (with a refusal code such as `RED_WRONG_REASON`
@@ -36,7 +36,9 @@ Repository code never runs with your credentials.
 - **Docker (default).** Fails closed if Docker or the sandbox image is unavailable. Dependency installation runs in a
   networked setup container that is then committed to an image; every repair-phase command runs in a container from
   that image with `--network none`, all capabilities dropped, `no-new-privileges`, memory/CPU/PID limits, a tmpfs
-  `/tmp`, an in-container kill timeout, and no host environment variables.
+  `/tmp`, an in-container kill timeout, and no host environment variables. No process outlives the command that
+  started it (leftovers are killed and reaped), and the host never follows a symlink inside the workspace, so a
+  link planted by repository content or code cannot redirect a harness read or write outside it.
 - **`--unsafe-local-sandbox`.** Runs on the host as your user, for trusted local fixtures only: prints a warning,
   passes only an allowlisted environment (no tokens or API keys), skips dependency installation, and can never
   publish.
@@ -45,8 +47,14 @@ Workspaces are fresh clones of the source repository's committed `HEAD`; uncommi
 the clone, every git operation on the workspace runs inside the sandbox, and all comparisons use the recorded base
 commit SHA rather than `HEAD`.
 
-> The Docker path is covered by tests that mock the Docker CLI (flags, phases, fail-closed behaviour, environment).
-> It has not yet been exercised against a real Docker daemon in this repository's development environment.
+> Tested against a real Docker engine (Engine 29.8 in Docker Desktop 4.91 on Windows, Linux containers) by
+> [`tests/test_docker_integration.py`](autonomous-pr-fixer/tests/test_docker_integration.py), which checks inside real
+> containers: no network interface but loopback in the repair phase, no host environment, empty capability sets,
+> `NoNewPrivs`, the 2 GiB memory and 256-PID limits, the in-container kill timeout, killed leftover processes, a
+> networked setup phase whose filesystem carries into the offline container, cleanup of containers and images, fail
+> closed on a missing image, and the demo admitted and a regressing patch refused inside Docker. Those tests skip when
+> Docker is unavailable. Symlink refusal is unit-tested; on Linux it was run in a container standing in for a Linux
+> host. A Linux or macOS host running the Docker path has not been exercised.
 
 ## Quick start
 
@@ -89,7 +97,8 @@ python main.py --repo /path/to/git/repo \
 ```
 
 The workspace is the `--base` commit and the candidate patch is `git diff base head`. With no `.cerberus.yml` scope,
-any file may change (within file/line limits), but modifying or deleting existing tests is refused.
+any file may change (within file/line limits). New tests, including tests appended to an existing test file, are
+allowed; changing or deleting existing test lines is refused.
 
 ### Patch sources
 
@@ -176,7 +185,9 @@ Contents (read & write), Metadata (read). Workflows permission is not requested.
 
 To verify a PR, Cerberus uses the **single new test file the PR adds** as the reproduction test: it must fail on the
 base commit and pass with the PR. A PR that adds zero or several test files is refused with guidance, without running
-anything. Issue text comes from the issue linked with "Fixes #N", otherwise from the PR.
+anything; this includes the common case of a PR that appends its test to an existing test file, which the CLI can
+verify (`--base/--head` with `--repro-test`) but the App cannot yet. Issue text comes from the issue linked with
+"Fixes #N", otherwise from the PR.
 
 Operational properties: HMAC-verified deliveries (fails closed); deliveries claimed once in a SQLite store (idempotent
 across restarts); every run recorded from queue to terminal state and linked to its `run.json` and Check Run; runs in
@@ -200,6 +211,7 @@ Environment variables are read directly from the process; `.env` is not loaded a
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `CERBERUS_MODEL` | Optional model access |
 | `CERBERUS_USE_LLM`, `CERBERUS_USE_LLM_REPRO` | Enable model patching / reproduction |
 | `CERBERUS_SANDBOX`, `CERBERUS_SANDBOX_IMAGE` | `docker` (default) or `host-unsafe`; image name |
+| `CERBERUS_SANDBOX_MAX_LIFETIME_SECONDS` | A container stops and removes itself after this long even if the process that started it was killed; default 14400 (the App uses its run timeout + 300) |
 | `PATCH_MAX_ATTEMPTS`, `PATCH_MAX_LINES_CHANGED` | Patch-loop budget, default 5 attempts / 200 lines |
 | `SANDBOX_TIMEOUT_SECONDS` | Default per-command timeout, 60 |
 | `RUN_ARTIFACTS_DIR` | Where `run.json` files go, default `artifacts` |
@@ -225,11 +237,13 @@ python evaluation/benchmark.py --unsafe-local-sandbox              # scored run 
   and fail on the seeded bug; reproduction tests fail on the bug and pass on the reference fix). The set is frozen
   by a SHA-256 manifest; scored runs refuse to start if it changed.
 - **Limits:** the instances are small and were written by the Cerberus developer, and no model or external agent is
-  in the loop. This measures gate decisions on known cases, not repair ability on real repositories. No
-  real-world or human-authored bug set exists yet.
+  in the loop. This measures gate decisions on known cases, not repair ability on real repositories. The only
+  real-world cases are the three external bugs below.
 
-Report of record: [`benchmark/reports/v1.md`](autonomous-pr-fixer/benchmark/reports/v1.md) (commit `271bf37`,
-host-unsafe sandbox, pre-written candidate diffs, 24 instances). Headline numbers from that report:
+Reports of record: [`benchmark/reports/v1-docker.md`](autonomous-pr-fixer/benchmark/reports/v1-docker.md) (commit
+`e394d03`, Docker sandbox) and the earlier [`benchmark/reports/v1.md`](autonomous-pr-fixer/benchmark/reports/v1.md)
+(commit `271bf37`, host-unsafe sandbox); both use pre-written candidate diffs on the 24 frozen instances and made the
+same decision on every instance. Headline numbers:
 
 | | Cerberus | Ungated baseline |
 | --- | --- | --- |
@@ -242,6 +256,35 @@ All four false admissions are plausible-but-wrong patches that pass every visibl
 gates cannot see those mistakes. With n = 24, the intervals are wide: these numbers show the gates behave as designed
 on known failure modes, not how often they would help on real projects.
 
+### External repositories
+
+```bash
+python evaluation/external_repos.py            # Docker only; clones the pinned repositories
+```
+
+Three real bugs in open-source projects Cerberus was not written against, each pinned to its upstream fix commit
+([`evaluation/external/cases.json`](autonomous-pr-fixer/evaluation/external/cases.json)): sqlparse `f66d12c`,
+boltons `ead236e`, more-itertools `cca3294`. The reproduction test is the test the fix commit added. Variants are the
+upstream source fix, the unmodified upstream commit verified as an existing change, and hand-made wrong inputs.
+
+Report of record: [`evaluation/external/report.md`](autonomous-pr-fixer/evaluation/external/report.md) (commit
+`e394d03`, Docker): **11 of 11 runs ended in the expected state and refusal code.**
+
+| Variant | Result |
+| --- | --- |
+| Upstream fix (3 bugs), upstream commit as an existing change (3 bugs) | 6 × `ADMITTED`; suites of 492, 445 and 679 tests, none newly failing |
+| sqlparse: fix that also strips identifier quoting | `REGRESSION`, naming the 3 upstream tests it breaks |
+| sqlparse: same patch plus edits to those 3 tests | `SCOPE_VIOLATION` (existing test lines changed) |
+| boltons: fix that raises for every `factor=1.0` | `GREEN_NOT_REACHED` |
+| more-itertools: reproduction test with a non-existent import | `RED_INVALID_TEST` |
+| more-itertools: test that already passes on the bug | `RED_NOT_FAILING` |
+
+These runs exposed two defects the synthetic benchmark could not (real fixes that append a test to an existing test
+file were refused; a diff ending in a blank context line was corrupted before `git apply`), and the move to a real
+Docker engine prompted a review that found host-side harness file access followed workspace symlinks. All three are
+fixed and covered by tests. Three bugs chosen
+for fast suites are a smoke test on foreign code, not a representative sample.
+
 The older smoke runner (`python evaluation/smoke_runner.py`) still exercises five scripted scenarios.
 
 ## Known limitations
@@ -251,8 +294,10 @@ The older smoke runner (`python evaluation/smoke_runner.py`) still exercises fiv
   sandbox image contains only Python, git and pytest.
 - **Dependency detection** covers `pyproject.toml`/`setup.py` (with `test`/`dev` extras), `requirements*.txt`;
   anything else needs `setup:` in `.cerberus.yml`. No private indexes or services such as databases.
-- **Not yet exercised against real services:** Docker (mocked CLI only), the GitHub App (fake API only), external
-  coding agents (scripted stand-in only), and real repositories written by other people.
+- **Not yet exercised against real services:** the GitHub App (fake API only), external coding agents (scripted
+  stand-in only), and the Docker sandbox on a Linux or macOS host (it has run on Docker Desktop for Windows).
+- **External validation is small:** three bugs in three pure-Python libraries, chosen for fast test suites. It shows
+  the gates work on code Cerberus was not written against, not how often they help on real projects.
 - **Plausible-but-wrong patches pass the gates** when the visible tests don't cover the mistake; the benchmark measures
   this rather than hiding it.
 - **The RED gate's relevance check is heuristic** (imports and identifiers written as code in the issue). A test can
@@ -274,7 +319,7 @@ autonomous-pr-fixer/
 ├── sandbox/         Dockerfile for the sandbox image
 ├── examples/        demo fixture (rate_calculator) and preserved VoteVault scenario
 ├── benchmark/       frozen instance set, templates, hidden tests, manifest, reports
-├── evaluation/      benchmark runner, smoke scenarios, metrics reporter
+├── evaluation/      benchmark runner, external-repository runner and cases, smoke scenarios, metrics reporter
 └── tests/
 ```
 

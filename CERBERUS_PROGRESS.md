@@ -15,6 +15,7 @@ Branch: `cerberus/verification-gate` (one commit per phase; nothing pushed).
 | 2 — Generalization (`.cerberus.yml`, patch-source interface, verify existing change, JUnit XML) | Done (local; GitHub PR fetch + Check Run deferred to Phase 4) |
 | Evaluation benchmark (built before Phase 3) | Done: v1 frozen, scored |
 | 4 — GitHub App workflow | Done (tested against a fake GitHub API; not installed on a real repository) |
+| Real Docker and external repositories | Done (Docker Desktop on Windows; three open-source repositories) |
 | 3 — Repair quality | Deferred (see "Phase 3 decision") |
 
 ## Phase 0 — completed
@@ -151,6 +152,52 @@ What would be worth doing once a key and real repositories are available, in ord
 (2) search/replace edit format for the built-in generator if apply failures dominate; (3) several candidate patches
 selected by the gates; (4) several candidate reproduction tests selected by the RED gate.
 
+## Real Docker and external repositories — completed
+
+Environment: Docker Desktop 4.91 (Engine 29.8, WSL 2) on Windows 11. Docker Desktop initially failed to start because
+of stale AF_UNIX socket files left by a crashed session; the folders holding them were renamed aside, not deleted
+(`%LOCALAPPDATA%\Docker\run.stale-20260917`, `run.stale2-20260917`, `%LOCALAPPDATA%\docker-secrets-engine.stale-20260917`).
+
+- **Sandbox verified in real containers** (`tests/test_docker_integration.py`, skipped without Docker): only `lo` in the
+  repair phase and no outbound connection; no host environment (including a planted secret); `CapEff`/`CapBnd` empty,
+  `NoNewPrivs` 1; `memory.max` 2 GiB and `pids.max` 256, with a 400-process spawn stopped by the limit; in-container
+  kill timeout; leftover processes killed after each command; container-planted symlinks not followed by the host;
+  networked setup whose filesystem carries into the offline container; setup refused after repair starts; container
+  and setup image removed on destroy; missing image fails closed; orphaned container stops and removes itself; demo
+  `ADMITTED` and a regressing patch `REFUSED/REGRESSION` inside Docker.
+- **Security fix — symlinks.** Host-side reads and writes of workspace files followed symlinks, so on a Linux or macOS
+  host a link committed to a repository or created by code in the container could redirect a harness write
+  (candidate patch, reproduction test, pathspec files) or read (JUnit reports, `pyproject.toml`, `.cerberus.yml`,
+  files sent to a model) outside the workspace. `Sandbox._safe_resolve` now refuses any symlinked component; reads
+  and writes use `O_NOFOLLOW`; `remove_file` unlinks without following; repository scanners skip links;
+  `.cerberus.yml` may not be a link; `.git/info/exclude` is written once before any repository code runs and git
+  commands exclude `.cerberus/` explicitly. On Linux (unit tests run inside a container) the directory-symlink test
+  fails against the previous code (the write escaped) and passes now.
+- **Security fix — leftover processes.** A background process started by a command survived it and could race host
+  file access. Every command now ends with `kill -9 -1` inside the container, and PID 1 is a small Python reaper so
+  the killed processes do not accumulate as zombies against the PID limit.
+- **Robustness — orphaned containers.** A process killed without cleanup (observed during validation; also the GitHub
+  App's timeout path) left containers running. Containers now run with `--rm` and a `cerberus.sandbox=true` label,
+  and PID 1 exits after `CERBERUS_SANDBOX_MAX_LIFETIME_SECONDS` (default 4 h; the App uses run timeout + 300 s).
+- **Gate fix — tests added to existing files.** The unmodified upstream sqlparse commit was refused as
+  `SCOPE_VIOLATION` because it appends its test to `tests/test_parse.py`, the shape of most real fixes. Existing test
+  files with only added lines are now allowed and recorded as `extended_test_files`; the regression gate checks them
+  out at the base commit for its run and restores the patch's bytes afterwards, so an added skip marker, early
+  `return` or monkeypatch cannot change how existing tests judge the patch. With that step disabled, a test adding an
+  early `return` to a test the patch breaks is admitted; with it, the patch is refused as `REGRESSION`. Changed or
+  deleted test lines and any `conftest.py` change remain scope violations.
+- **Bug fix — blank trailing context line.** `extract_diff_from_markdown` stripped all trailing whitespace, deleting a
+  final context line that is a single space; git then rejected the patch as corrupt (the unmodified boltons commit
+  was refused as `GREEN_NOT_REACHED` for this reason). Only surrounding line breaks are stripped now.
+- **Evidence.** `GREEN_NOT_REACHED` names the last attempt's failure in one line; `run.json` gains `patch_history`
+  (status, applied, detail per attempt); the duplicate-diff abort record no longer counts as an attempt.
+- **External repositories** (`evaluation/external_repos.py`, `evaluation/external/`): sqlparse `f66d12c`, boltons
+  `ead236e`, more-itertools `cca3294`; reproduction test = the test the fix commit added; 11 variants. Report of
+  record `evaluation/external/report.md` at `e394d03`: 11/11 expected verdicts.
+- **Benchmark under Docker:** `benchmark/reports/v1-docker.md` at `e394d03`: every per-instance decision identical to
+  the host-unsafe v1 record; mean patch attempts 1 (was 1.05 before the attempt-count fix); median wall time 10.0 s,
+  p90 13.0 s per instance including container startup.
+
 ## Architectural decisions
 
 - **Scripted inputs are caller inputs, not pipeline branches.** Demos and human patches use the same
@@ -168,23 +215,31 @@ selected by the gates; (4) several candidate reproduction tests selected by the 
 - **Policy from the base commit.** `.cerberus.yml` is read before repository code runs and cannot be changed by the
   patch under verification.
 - **Threat model:** Cerberus verifies patches to trusted-but-buggy repositories. Repository code runs inside the test
-  process and could forge its own JUnit results; that is out of scope.
+  process and could forge its own JUnit results; that is out of scope. Escaping the sandbox is in scope: the host
+  never follows a workspace symlink, and no container process outlives its command, so nothing in the container can
+  redirect or race host-side file access.
+- **Existing tests judge the patch in their base form.** A patch may add tests to an existing test file; the
+  regression gate checks those files out at the base commit for its run and restores the patch's bytes afterwards.
+  Changing or deleting existing test lines stays a scope violation.
 - **Git:** work on a branch with one commit per phase.
 
 ## Known limitations (current)
 
-- Docker is not installed on the development machine: the Docker path is verified only with a mocked Docker CLI.
-  It must be run against a real daemon (build `sandbox/Dockerfile`, run `python main.py --demo`) before any claim
-  that it works.
+- The Docker path has run against Docker Desktop on a Windows host only. On that host, symlinks created in a container
+  are not followable from Windows at all; the symlink defences matter on Linux and macOS hosts, where they are covered
+  by unit tests run inside a Linux container, not by a Linux host running Docker.
 - POSIX bind-mount permissions (workspace made world-writable inside a 0700 temp root, `umask 0000` in container) are
-  designed but unexercised on Linux.
+  designed but unexercised on a Linux host.
+- External validation covers three bugs in three small pure-Python libraries chosen for fast suites; it shows the
+  gates work on code Cerberus was not written against, not how they perform on a representative bug sample.
 - Without `.cerberus.yml`, the test command is `python -m pytest -q` and the repair scope is the single localized
   file; localization quality is unmeasured.
 - The external-agent adapter is tested only with a scripted stand-in; it has not been run with real Claude Code or
   Codex (that consumes the user's account and needs explicit permission).
 - The GitHub App is tested only against a fake GitHub API; registering and installing an App requires the user.
 - The benchmark instances are small, synthetic and author-written; there is no real-world or human-authored bug set.
-- PR verification requires the PR to add exactly one new test file.
+- GitHub App PR verification requires the PR to add exactly one new test file, so the common shape of a real fix
+  (a test appended to an existing file) is refused by the App; the CLI verifies it with `--base/--head --repro-test`.
 - Test-file detection uses Python naming conventions (`tests/`, `test_*.py`, `*_test.py`, `conftest.py`).
 - RED relevance is heuristic; a test can pass every rule and still encode wrong behaviour.
 - Regression flake detection re-checks only suspected regressions, once, on the base code.
@@ -203,3 +258,8 @@ selected by the gates; (4) several candidate reproduction tests selected by the 
 | 2026-09-17 | Benchmark + Phase 4 full suite (GitHub API faked, host-unsafe sandbox, Docker mocked) | 211 passed |
 | 2026-09-17 | `python evaluation/benchmark.py --validate --unsafe-local-sandbox` | 24 instances, 0 problems (after fixing 2 ambiguous seed edits) |
 | 2026-09-17 | Benchmark v1 report of record at `271bf37` (`benchmark/reports/v1.md`) | Cerberus admitted 11 (4 should have been refused); ungated baseline admitted 20 (13 should have been refused); 7/7 correct fixes admitted by both; rejection accuracy 12/17 |
+| 2026-09-17 | `docker build -t cerberus-sandbox:py3.11 sandbox/`; `python main.py --demo` (Docker, before the fixes below) | `ADMITTED`, 25 s |
+| 2026-09-17 | `tests/test_sandbox.py` on Linux (python:3.11 container standing in for a Linux host) | 23 passed, 0 skipped; directory-symlink test fails against the previous sandbox code |
+| 2026-09-17 | Full suite at `e394d03` (real Docker engine for `test_docker_integration.py`) | 231 passed, 5 skipped (symlink tests: no symlink privilege on this Windows account) |
+| 2026-09-17 | `python evaluation/external_repos.py --record` at `e394d03` | 11/11 expected verdicts (6 admitted, 5 refused with the expected codes) |
+| 2026-09-17 | `python evaluation/benchmark.py` (Docker) at `e394d03` (`benchmark/reports/v1-docker.md`) | Same per-instance decisions as the v1 record; mean attempts 1; median 10.0 s, p90 13.0 s |

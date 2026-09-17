@@ -1,0 +1,323 @@
+[
+  {
+    "bug": "sqlparse-332",
+    "variant": "upstream-fix",
+    "note": "",
+    "expected": [
+      "ADMITTED",
+      null
+    ],
+    "actual": [
+      "ADMITTED",
+      null
+    ],
+    "match": true,
+    "exit_code": 0,
+    "wall_sec": 32.1,
+    "base_commit": "df8e28495a87954a9d52de70c33ef7225c53b28f",
+    "fix_commit": "f66d12c245412f28c58f045b646eb53c0e691b8b",
+    "sandbox": "docker",
+    "red_failure_types": [
+      "AssertionError"
+    ],
+    "baseline_tests": 492,
+    "newly_failing": [],
+    "test_files_run_at_base": [],
+    "changed_files": [
+      "sqlparse/sql.py"
+    ],
+    "refusal_detail": ""
+  },
+  {
+    "bug": "sqlparse-332",
+    "variant": "upstream-commit",
+    "note": "the unmodified upstream commit, which appends its test to an existing test file",
+    "expected": [
+      "ADMITTED",
+      null
+    ],
+    "actual": [
+      "ADMITTED",
+      null
+    ],
+    "match": true,
+    "exit_code": 0,
+    "wall_sec": 39.0,
+    "base_commit": "df8e28495a87954a9d52de70c33ef7225c53b28f",
+    "fix_commit": "f66d12c245412f28c58f045b646eb53c0e691b8b",
+    "sandbox": "docker",
+    "red_failure_types": [
+      "AssertionError"
+    ],
+    "baseline_tests": 492,
+    "newly_failing": [],
+    "test_files_run_at_base": [
+      "tests/test_parse.py"
+    ],
+    "changed_files": [
+      "sqlparse/sql.py",
+      "tests/test_parse.py"
+    ],
+    "refusal_detail": ""
+  },
+  {
+    "bug": "sqlparse-332",
+    "variant": "regressing",
+    "note": "fixes the bug but also strips identifier quoting",
+    "expected": [
+      "REFUSED",
+      "REGRESSION"
+    ],
+    "actual": [
+      "REFUSED",
+      "REGRESSION"
+    ],
+    "match": true,
+    "exit_code": 1,
+    "wall_sec": 33.1,
+    "base_commit": "df8e28495a87954a9d52de70c33ef7225c53b28f",
+    "fix_commit": "f66d12c245412f28c58f045b646eb53c0e691b8b",
+    "sandbox": "docker",
+    "red_failure_types": [
+      "AssertionError"
+    ],
+    "baseline_tests": 492,
+    "newly_failing": [
+      "tests.test_parse::test_parse_access_symbol",
+      "tests.test_parse::test_parse_square_brackets_notation_isnt_too_greedy",
+      "tests.test_parse::test_sqlite_identifiers"
+    ],
+    "test_files_run_at_base": [],
+    "changed_files": [],
+    "refusal_detail": "The patch introduced regressions: tests.test_parse::test_parse_access_symbol, tests.test_parse::test_parse_square_brackets_notation_isnt_too_greedy, tests.test_parse::test_sqlite_identifiers"
+  },
+  {
+    "bug": "sqlparse-332",
+    "variant": "test-weakening",
+    "note": "the regressing patch plus edits to the three existing tests it breaks",
+    "expected": [
+      "REFUSED",
+      "SCOPE_VIOLATION"
+    ],
+    "actual": [
+      "REFUSED",
+      "SCOPE_VIOLATION"
+    ],
+    "match": true,
+    "exit_code": 1,
+    "wall_sec": 36.7,
+    "base_commit": "df8e28495a87954a9d52de70c33ef7225c53b28f",
+    "fix_commit": "f66d12c245412f28c58f045b646eb53c0e691b8b",
+    "sandbox": "docker",
+    "red_failure_types": [
+      "AssertionError"
+    ],
+    "baseline_tests": 492,
+    "newly_failing": [],
+    "test_files_run_at_base": [],
+    "changed_files": [
+      "sqlparse/sql.py",
+      "tests/test_parse.py"
+    ],
+    "refusal_detail": "Existing test files were modified or deleted: tests/test_parse.py (set scope.allow_test_modifications in .cerberus.yml to permit this)"
+  },
+  {
+    "bug": "boltons-backoff",
+    "variant": "upstream-fix",
+    "note": "",
+    "expected": [
+      "ADMITTED",
+      null
+    ],
+    "actual": [
+      "ADMITTED",
+      null
+    ],
+    "match": true,
+    "exit_code": 0,
+    "wall_sec": 29.8,
+    "base_commit": "57cb026b7f47cd2765a0d5acdc83849ed5f1f6a3",
+    "fix_commit": "ead236e278ca0466bf468de746b5960fb12d7e5b",
+    "sandbox": "docker",
+    "red_failure_types": [
+      "ZeroDivisionError"
+    ],
+    "baseline_tests": 445,
+    "newly_failing": [],
+    "test_files_run_at_base": [],
+    "changed_files": [
+      "boltons/iterutils.py"
+    ],
+    "refusal_detail": ""
+  },
+  {
+    "bug": "boltons-backoff",
+    "variant": "upstream-commit",
+    "note": "",
+    "expected": [
+      "ADMITTED",
+      null
+    ],
+    "actual": [
+      "ADMITTED",
+      null
+    ],
+    "match": true,
+    "exit_code": 0,
+    "wall_sec": 25.6,
+    "base_commit": "57cb026b7f47cd2765a0d5acdc83849ed5f1f6a3",
+    "fix_commit": "ead236e278ca0466bf468de746b5960fb12d7e5b",
+    "sandbox": "docker",
+    "red_failure_types": [
+      "ZeroDivisionError"
+    ],
+    "baseline_tests": 445,
+    "newly_failing": [],
+    "test_files_run_at_base": [
+      "tests/test_iterutils.py"
+    ],
+    "changed_files": [
+      "boltons/iterutils.py",
+      "tests/test_iterutils.py"
+    ],
+    "refusal_detail": ""
+  },
+  {
+    "bug": "boltons-backoff",
+    "variant": "incomplete",
+    "note": "raises ValueError for every factor of 1.0, including start == stop",
+    "expected": [
+      "REFUSED",
+      "GREEN_NOT_REACHED"
+    ],
+    "actual": [
+      "REFUSED",
+      "GREEN_NOT_REACHED"
+    ],
+    "match": true,
+    "exit_code": 1,
+    "wall_sec": 19.4,
+    "base_commit": "57cb026b7f47cd2765a0d5acdc83849ed5f1f6a3",
+    "fix_commit": "ead236e278ca0466bf468de746b5960fb12d7e5b",
+    "sandbox": "docker",
+    "red_failure_types": [
+      "ZeroDivisionError"
+    ],
+    "baseline_tests": 445,
+    "newly_failing": [],
+    "test_files_run_at_base": [],
+    "changed_files": [],
+    "refusal_detail": "No candidate patch made the reproduction test pass after 1 attempt(s). Last attempt: FAIL: ValueError."
+  },
+  {
+    "bug": "moreitertools-last",
+    "variant": "upstream-fix",
+    "note": "",
+    "expected": [
+      "ADMITTED",
+      null
+    ],
+    "actual": [
+      "ADMITTED",
+      null
+    ],
+    "match": true,
+    "exit_code": 0,
+    "wall_sec": 39.4,
+    "base_commit": "c834d6e4a0c4280b7b7750cb0de8dd8acb3d4c2c",
+    "fix_commit": "cca32949f12d473fd823e37a5530c30d2faa1332",
+    "sandbox": "docker",
+    "red_failure_types": [
+      "ValueError"
+    ],
+    "baseline_tests": 679,
+    "newly_failing": [],
+    "test_files_run_at_base": [],
+    "changed_files": [
+      "more_itertools/more.py"
+    ],
+    "refusal_detail": ""
+  },
+  {
+    "bug": "moreitertools-last",
+    "variant": "upstream-commit",
+    "note": "",
+    "expected": [
+      "ADMITTED",
+      null
+    ],
+    "actual": [
+      "ADMITTED",
+      null
+    ],
+    "match": true,
+    "exit_code": 0,
+    "wall_sec": 43.7,
+    "base_commit": "c834d6e4a0c4280b7b7750cb0de8dd8acb3d4c2c",
+    "fix_commit": "cca32949f12d473fd823e37a5530c30d2faa1332",
+    "sandbox": "docker",
+    "red_failure_types": [
+      "ValueError"
+    ],
+    "baseline_tests": 679,
+    "newly_failing": [],
+    "test_files_run_at_base": [
+      "tests/test_more.py"
+    ],
+    "changed_files": [
+      "more_itertools/more.py",
+      "tests/test_more.py"
+    ],
+    "refusal_detail": ""
+  },
+  {
+    "bug": "moreitertools-last",
+    "variant": "invalid-reproduction",
+    "note": "the upstream test plus an import that does not exist",
+    "expected": [
+      "REFUSED",
+      "RED_INVALID_TEST"
+    ],
+    "actual": [
+      "REFUSED",
+      "RED_INVALID_TEST"
+    ],
+    "match": true,
+    "exit_code": 1,
+    "wall_sec": 7.3,
+    "base_commit": "c834d6e4a0c4280b7b7750cb0de8dd8acb3d4c2c",
+    "fix_commit": "cca32949f12d473fd823e37a5530c30d2faa1332",
+    "sandbox": "docker",
+    "red_failure_types": [],
+    "baseline_tests": null,
+    "newly_failing": [],
+    "test_files_run_at_base": [],
+    "changed_files": [],
+    "refusal_detail": "RED gate not satisfied: the reproduction test errored outside its test body (::.cerberus.test_reproduce: collection failure); setup, fixture and collection errors are not reproductions."
+  },
+  {
+    "bug": "moreitertools-last",
+    "variant": "non-reproducing-test",
+    "note": "a test that already passes on the buggy code",
+    "expected": [
+      "REFUSED",
+      "RED_NOT_FAILING"
+    ],
+    "actual": [
+      "REFUSED",
+      "RED_NOT_FAILING"
+    ],
+    "match": true,
+    "exit_code": 1,
+    "wall_sec": 7.1,
+    "base_commit": "c834d6e4a0c4280b7b7750cb0de8dd8acb3d4c2c",
+    "fix_commit": "cca32949f12d473fd823e37a5530c30d2faa1332",
+    "sandbox": "docker",
+    "red_failure_types": [],
+    "baseline_tests": null,
+    "newly_failing": [],
+    "test_files_run_at_base": [],
+    "changed_files": [],
+    "refusal_detail": "RED gate not satisfied: the reproduction test passed on the unpatched code, so it does not reproduce the bug."
+  }
+]
