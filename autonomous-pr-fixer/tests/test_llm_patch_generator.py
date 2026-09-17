@@ -70,13 +70,14 @@ def _no_ambient_keys(monkeypatch):
 @pytest.fixture
 def sandbox_with_bug():
     with Sandbox() as sb:
-        sb.exec("git init && git config user.name 'Bot' && git config user.email 'b@t.co'")
+        sb.exec("git init && git config user.name \"Bot\" && git config user.email \"b@t.co\"")
         sb.write_file("calc.py", "def add(a, b):\n    return a - b\n")
+        sb.exec("git add -A && git commit -m \"initial\"")
+        sb.ensure_harness_dir()
         sb.write_file(
-            "test_reproduce.py",
+            ".cerberus/test_reproduce.py",
             "from calc import add\ndef test_repro(): assert add(2, 3) == 5\n",
         )
-        sb.exec("git add -A && git commit -m 'initial'")
         yield sb
 
 

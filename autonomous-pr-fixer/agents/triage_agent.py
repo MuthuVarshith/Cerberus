@@ -72,9 +72,10 @@ class TriageAgent:
         pm = self._detect_package_manager()
         tf, test_cmd = self._detect_test_framework()
 
-        # 5. Create clean working branch
+        # 5. Name the branch a published fix would use. Nothing is checked out
+        # here: triage runs before dependency setup, and must not execute
+        # anything in the sandbox.
         branch_name = f"fix/issue-{issue_number}"
-        self.sandbox.exec(f"git checkout -b {branch_name}")
 
         # 6. Trigger repository indexing
         index_stats = self.indexer.build_index()

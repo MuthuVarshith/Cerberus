@@ -1,17 +1,13 @@
 """
-Tests for Patch Admission Controller conforming to Section 17 & 27.
-Verifies the strict conjunction:
-admit_pr = target_test_passed and regression_passed and blast_radius_acceptable and patch_changed
+Tests for the admission controller: a strict conjunction of GREEN, baseline-aware
+regression, scope, and a non-empty change.
 """
-import os
-import sys
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from harness.admission_controller import AdmissionController
 from agents.patch_agent import PatchLoopResult
-from agents.regression_agent import RegressionReport, StructuralBlastRadius
+from agents.regression_agent import RegressionReport
+from harness.admission_controller import AdmissionController
+from harness.scope_gate import ScopeReport
 
 REAL_DIFF = (
     "--- a/calc.py\n+++ b/calc.py\n@@ -1,2 +1,2 @@\n"
@@ -20,196 +16,105 @@ REAL_DIFF = (
 )
 
 
-def test_admission_approves_when_all_gates_pass():
-    patch_res = PatchLoopResult(reached_green=True, total_attempts=1, winning_diff=REAL_DIFF, history=[], total_lines_changed=2, final_changed_files=["calc.py"])
-    blast = StructuralBlastRadius(expected_files=["calc.py"], observed_files=["calc.py"], unauthorized_files=[], lines_added=2, lines_deleted=1, is_acceptable=True)
-    regr = RegressionReport(all_tests_passed=True, total_tests=5, passed_count=5, failed_count=0, skipped_count=0, error_count=0, execution_time_sec=0.5, raw_output="5 passed", blast_radius=blast)
+def _patch(green=True):
+    return PatchLoopResult(reached_green=green, total_attempts=1, winning_diff=REAL_DIFF if green else "", history=[])
 
-    decision = AdmissionController.evaluate(patch_res, regr)
+
+def _regression(**overrides):
+    base = dict(results_parsed=True, total_tests=5, passed_count=5, baseline_total=5)
+    base.update(overrides)
+    return RegressionReport(**base)
+
+
+def _scope(**overrides):
+    base = dict(
+        allowed_files=["calc.py"], changed_files=["calc.py"], lines_added=1, lines_deleted=1,
+        is_acceptable=True, diff_text=REAL_DIFF,
+    )
+    base.update(overrides)
+    return ScopeReport(**base)
+
+
+def test_admission_approves_when_all_gates_pass():
+    decision = AdmissionController.evaluate(_patch(), _regression(), _scope())
     assert decision.approved is True
-    assert decision.gate_1_target_passed is True
-    assert decision.gate_2_regression_passed is True
-    assert decision.gate_3_blast_radius_passed is True
-    assert decision.gate_4_patch_changed is True
+    assert decision.gate_1_target_passed and decision.gate_2_regression_passed
+    assert decision.gate_3_scope_passed and decision.gate_4_patch_changed
+    assert decision.rejection_state == ""
     assert "APPROVED" in decision.summary_markdown()
 
 
-def test_admission_rejects_when_regression_fails():
-    patch_res = PatchLoopResult(reached_green=True, total_attempts=2, winning_diff="", history=[])
-    blast = StructuralBlastRadius(expected_files=["calc.py"], observed_files=["calc.py"], unauthorized_files=[], lines_added=2, lines_deleted=1, is_acceptable=True)
-    regr = RegressionReport(all_tests_passed=False, total_tests=5, passed_count=4, failed_count=1, skipped_count=0, error_count=0, execution_time_sec=0.5, raw_output="1 failed", blast_radius=blast)
+def test_preexisting_failures_do_not_block_admission():
+    regr = _regression(passed_count=4, failed_count=1, preexisting_failures=["tests.test_x::test_old"])
+    decision = AdmissionController.evaluate(_patch(), regr, _scope())
+    assert decision.approved is True
+    assert "failing at baseline too" in decision.reasons[1]
 
-    decision = AdmissionController.evaluate(patch_res, regr)
+
+def test_newly_failing_test_is_a_regression():
+    regr = _regression(passed_count=4, failed_count=1, newly_failing=["tests.test_x::test_new"])
+    decision = AdmissionController.evaluate(_patch(), regr, _scope())
+    assert decision.approved is False
+    assert decision.rejection_state == "REGRESSION"
+    assert "tests.test_x::test_new" in decision.rejection_summary
+
+
+def test_test_that_stops_running_is_a_regression():
+    regr = _regression(missing_tests=["tests.test_x::test_gone"])
+    decision = AdmissionController.evaluate(_patch(), regr, _scope())
+    assert decision.approved is False
+    assert "no longer run" in decision.rejection_summary
+
+
+def test_unparseable_results_are_never_a_pass():
+    regr = RegressionReport(results_parsed=False, error_message="JUnit report was not written")
+    decision = AdmissionController.evaluate(_patch(), regr, _scope())
     assert decision.approved is False
     assert decision.gate_2_regression_passed is False
-    assert "Regression detected" in decision.rejection_summary
+    assert decision.rejection_state == "REGRESSION_UNVERIFIABLE"
 
 
-def test_admission_rejects_when_blast_radius_violated():
-    patch_res = PatchLoopResult(reached_green=True, total_attempts=1, winning_diff="", history=[])
-    blast = StructuralBlastRadius(expected_files=["calc.py"], observed_files=["calc.py", "vault.py"], unauthorized_files=["vault.py"], lines_added=10, lines_deleted=0, is_acceptable=False, scope_violation_reason="Unauthorized file touched: vault.py")
-    regr = RegressionReport(all_tests_passed=True, total_tests=5, passed_count=5, failed_count=0, skipped_count=0, error_count=0, execution_time_sec=0.5, raw_output="5 passed", blast_radius=blast)
-
-    decision = AdmissionController.evaluate(patch_res, regr)
+def test_admission_rejects_scope_violation():
+    scope = _scope(changed_files=["calc.py", "vault.py"], unauthorized_files=["vault.py"],
+                   is_acceptable=False, violation_reason="Files changed outside the allowed scope: vault.py")
+    decision = AdmissionController.evaluate(_patch(), _regression(), scope)
     assert decision.approved is False
-    assert decision.gate_3_blast_radius_passed is False
-    assert "Blast radius violation" in decision.rejection_summary
+    assert decision.rejection_state == "SCOPE_VIOLATION"
 
 
-def test_admission_rejects_when_target_test_fails():
-    """Gate 1: If reproduction target never reached GREEN, admission is blocked."""
-    patch_res = PatchLoopResult(reached_green=False, total_attempts=5, winning_diff="", history=[])
-    blast = StructuralBlastRadius(expected_files=["calc.py"], observed_files=["calc.py"], unauthorized_files=[], lines_added=2, lines_deleted=1, is_acceptable=True)
-    regr = RegressionReport(all_tests_passed=True, total_tests=5, passed_count=5, failed_count=0, skipped_count=0, error_count=0, execution_time_sec=0.5, raw_output="5 passed", blast_radius=blast)
-
-    decision = AdmissionController.evaluate(patch_res, regr)
+def test_admission_rejects_when_green_not_reached():
+    decision = AdmissionController.evaluate(_patch(green=False), _regression(), _scope())
     assert decision.approved is False
-    assert decision.gate_1_target_passed is False
-    assert "Target reproduction test failed" in decision.rejection_summary
+    assert decision.rejection_state == "GREEN_NOT_REACHED"
 
 
-def test_admission_rejects_when_multiple_gates_fail():
-    """All failed gate reasons are collected into the rejection summary."""
-    patch_res = PatchLoopResult(reached_green=False, total_attempts=5, winning_diff="", history=[])
-    blast = StructuralBlastRadius(expected_files=["calc.py"], observed_files=["calc.py", "secret.py"], unauthorized_files=["secret.py"], lines_added=5, lines_deleted=0, is_acceptable=False, scope_violation_reason="Unauthorized: secret.py")
-    regr = RegressionReport(all_tests_passed=False, total_tests=5, passed_count=3, failed_count=2, skipped_count=0, error_count=0, execution_time_sec=0.5, raw_output="2 failed", blast_radius=blast)
-
-    decision = AdmissionController.evaluate(patch_res, regr)
-    assert decision.approved is False
-    assert decision.gate_1_target_passed is False
-    assert decision.gate_2_regression_passed is False
-    assert decision.gate_3_blast_radius_passed is False
-    assert decision.gate_4_patch_changed is False
-    # All 4 reasons present in rejection summary
-    assert "GATE 1: FAIL" in decision.rejection_summary
-    assert "GATE 2: FAIL" in decision.rejection_summary
-    assert "GATE 3: FAIL" in decision.rejection_summary
-    assert "GATE 4: FAIL" in decision.rejection_summary
+def test_all_failed_gates_are_reported():
+    scope = _scope(changed_files=[], is_acceptable=False, violation_reason="x", diff_text="")
+    regr = _regression(newly_failing=["t::a"])
+    decision = AdmissionController.evaluate(_patch(green=False), regr, scope)
+    for gate in ("GATE 1: FAIL", "GATE 2: FAIL", "GATE 3: FAIL", "GATE 4: FAIL"):
+        assert gate in decision.rejection_summary
+    # The first failing gate names the refusal.
+    assert decision.rejection_state == "GREEN_NOT_REACHED"
 
 
-def test_agent_cannot_force_pr_approval_when_gate_fails():
-    """
-    Demonstrates that the LLM or an agent cannot force PR approval.
-    The Admission Controller is a deterministic programmatic boolean conjunction:
-    admit_pr = gate_1 and gate_2 and gate_3.
-    """
-    patch_res = PatchLoopResult(reached_green=False, total_attempts=1, winning_diff="", history=[])
-    blast = StructuralBlastRadius(expected_files=["calc.py"], observed_files=["calc.py"], unauthorized_files=[], lines_added=1, lines_deleted=0, is_acceptable=True)
-    regr = RegressionReport(all_tests_passed=True, total_tests=5, passed_count=5, failed_count=0, skipped_count=0, error_count=0, execution_time_sec=0.5, raw_output="5 passed", blast_radius=blast)
-
-    decision = AdmissionController.evaluate(patch_res, regr)
-
-    # Even if an external agent attempts to assert approval:
-    assert decision.approved is False
-    assert decision.admit_pr is False
-
-    # The publisher will not publish PR when decision.approved is False
-    from github.pr_publisher import PRPublisher
-    from harness.docker_sandbox import Sandbox
-    with Sandbox() as sb:
-        pub = PRPublisher(sb)
-        # Even if someone constructs an evidence report, decision.approved is False
-        report = pub.build_evidence_report(
-            issue_number=1,
-            issue_title="test",
-            reproduction_res=None or type("Repro", (), {"raw_output": "", "test_code": "assert True"})(),
-            patch_res=patch_res,
-            regression_res=regr,
-            decision=decision,
-            branch_name="fix-branch",
-        )
-        assert "REJECTED" in report
-
-
-def test_admission_rejects_empty_diff_even_if_all_other_gates_pass():
-    """
-    CRITICAL: Fix false PR admission with empty diff.
-    Target reproduction test = PASS
-    Regression suite = PASS
-    Blast radius = PASS
-    Files changed = 0 (empty diff)
-    Admission MUST be REJECTED with REJECTED_EMPTY_PATCH.
-    """
-    patch_res = PatchLoopResult(
-        reached_green=True,
-        total_attempts=1,
-        winning_diff="",
-        history=[],
-        total_lines_changed=0,
-        final_changed_files=[],
-    )
-    blast = StructuralBlastRadius(
-        expected_files=["calc.py"],
-        observed_files=[],
-        unauthorized_files=[],
-        lines_added=0,
-        lines_deleted=0,
-        is_acceptable=True,
-    )
-    regr = RegressionReport(
-        all_tests_passed=True,
-        total_tests=5,
-        passed_count=5,
-        failed_count=0,
-        skipped_count=0,
-        error_count=0,
-        execution_time_sec=0.5,
-        raw_output="5 passed",
-        blast_radius=blast,
-    )
-
-    decision = AdmissionController.evaluate(patch_res, regr)
-    assert decision.approved is False
-    assert decision.admit_pr is False
-    assert decision.gate_1_target_passed is True
-    assert decision.gate_2_regression_passed is True
-    assert decision.gate_3_blast_radius_passed is True
-    assert decision.gate_4_patch_changed is False
-    assert decision.rejection_state == "REJECTED_EMPTY_PATCH"
-    assert "Candidate repair produced an empty, whitespace-only, or non-attributable diff" in decision.rejection_summary
-
-
-def test_admission_rejects_whitespace_only_diff():
-    """
-    Reject diffs that contain only whitespace modifications.
-    """
-    whitespace_diff = (
-        "--- a/calc.py\n"
-        "+++ b/calc.py\n"
-        "@@ -1,2 +1,2 @@\n"
-        "-   \n"
-        "+   \n"
-    )
-    patch_res = PatchLoopResult(
-        reached_green=True,
-        total_attempts=1,
-        winning_diff=whitespace_diff,
-        history=[],
-        total_lines_changed=0,
-        final_changed_files=["calc.py"],
-    )
-    blast = StructuralBlastRadius(
-        expected_files=["calc.py"],
-        observed_files=["calc.py"],
-        unauthorized_files=[],
-        lines_added=0,
-        lines_deleted=0,
-        is_acceptable=True,
-    )
-    regr = RegressionReport(
-        all_tests_passed=True,
-        total_tests=5,
-        passed_count=5,
-        failed_count=0,
-        skipped_count=0,
-        error_count=0,
-        execution_time_sec=0.5,
-        raw_output="5 passed",
-        blast_radius=blast,
-    )
-
-    decision = AdmissionController.evaluate(patch_res, regr)
+@pytest.mark.parametrize(
+    "diff_text,changed",
+    [
+        ("", []),
+        ("--- a/calc.py\n+++ b/calc.py\n@@ -1,2 +1,2 @@\n-   \n+   \n", ["calc.py"]),
+    ],
+    ids=["empty", "whitespace-only"],
+)
+def test_admission_rejects_empty_or_whitespace_change(diff_text, changed):
+    decision = AdmissionController.evaluate(_patch(), _regression(), _scope(changed_files=changed, diff_text=diff_text))
     assert decision.approved is False
     assert decision.gate_4_patch_changed is False
-    assert decision.rejection_state == "REJECTED_EMPTY_PATCH"
+    assert decision.rejection_state == "EMPTY_PATCH"
 
+
+def test_new_file_counts_as_a_change():
+    new_file_diff = "diff --git a/helper.py b/helper.py\nnew file mode 100644\n--- /dev/null\n+++ b/helper.py\n@@ -0,0 +1 @@\n+X = 1\n"
+    scope = _scope(changed_files=["helper.py"], new_files=["helper.py"], allowed_files=["helper.py"], diff_text=new_file_diff)
+    decision = AdmissionController.evaluate(_patch(), _regression(), scope)
+    assert decision.gate_4_patch_changed is True

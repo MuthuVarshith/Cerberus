@@ -1,19 +1,14 @@
 """
 CLI entrypoint for Cerberus, a verification gate for bug-fix patches.
 
-Pipeline stages:
-  [1/8] TRIAGE
-  [2/8] REPRODUCTION
-  [3/8] RED GATE
-  [4/8] LOCALIZATION
-  [5/8] PATCH LOOP (GREEN gate)
-  [6/8] REGRESSION
-  [7/8] BLAST RADIUS
-  [8/8] ADMISSION
+Pipeline:
+  TRIAGE -> SETUP (networked, before any repair command) -> RED -> BASELINE
+  -> LOCALIZATION -> PATCH LOOP (GREEN) -> REGRESSION -> SCOPE -> ADMISSION
 
-The pipeline never invents its own inputs. A reproduction test comes from the
-caller or from a model; a patch comes from the caller's patch generator or from
-a model. When neither is available the run is refused, not improvised.
+Every run ends in exactly one terminal state: ADMITTED, REFUSED (with a
+RefusalCode naming the gate) or ERROR. The pipeline never invents its own
+inputs: a reproduction test comes from the caller or a model, a patch from the
+caller's patch generator or a model. Without them the run is refused.
 """
 from __future__ import annotations
 
@@ -27,13 +22,14 @@ from typing import Any, Callable, Dict, List, Optional
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from harness.docker_sandbox import Sandbox
+from harness.docker_sandbox import ISOLATION_HOST_UNSAFE, Sandbox, SandboxError, resolve_isolation
 from harness.diff_utils import DiffUtils
 from harness.admission_controller import AdmissionController, AdmissionDecision
-from harness.pipeline_state import PipelineState, PipelineStateMachine
+from harness.pipeline_state import PipelineState, PipelineStateMachine, RefusalCode
 from harness.config import load_config
 from harness.logger import log_event
 from harness.run_artifact import write_run_artifact
+from harness.scope_gate import ScopeReport, analyze_scope
 from agents.triage_agent import TriageAgent
 from agents.reproduction_agent import ReproductionAgent, ReproductionResult
 from agents.localization_agent import LocalizationAgent
@@ -46,14 +42,22 @@ from github.pr_publisher import PRPublisher
 
 PatchGenerator = Callable[[int, str], str]
 
+MAX_SCOPE_FILES = 3
+GREEN_VERIFICATION_RUNS = 3
+
 
 def _parse_referenced_file(issue_body: str, workspace_dir: str) -> Optional[str]:
     match = re.search(r"\bat\s+([\w./\\-]+)(?::\d+)?", issue_body)
     if not match:
         return None
     parsed_path = match.group(1).replace("\\", "/").split(":")[0]
-    if os.path.exists(os.path.join(workspace_dir, parsed_path)):
-        return parsed_path
+    # Issue text is untrusted: the referenced path must resolve inside the workspace.
+    workspace = os.path.abspath(workspace_dir)
+    candidate = os.path.abspath(os.path.join(workspace, parsed_path))
+    if os.path.commonpath([workspace, candidate]) != workspace:
+        return None
+    if os.path.isfile(candidate):
+        return os.path.relpath(candidate, workspace).replace("\\", "/")
     return None
 
 
@@ -72,11 +76,7 @@ def _llm_repro_enabled(explicit: Optional[bool] = None) -> bool:
 
 
 class _RunRecorder:
-    """Collects what happened in a run and writes exactly one artifact at the end.
-
-    Every exit path goes through `finish`, so a run that stops early still leaves
-    an audit record with its final state and the reason it stopped.
-    """
+    """Collects what happened in a run and writes exactly one artifact at the end."""
 
     def __init__(self, run_id: str, issue_number: int, issue_title: str, mode: str, artifacts_dir: str):
         self.run_id = run_id
@@ -86,61 +86,54 @@ class _RunRecorder:
         self.artifacts_dir = artifacts_dir
         self.sm = PipelineStateMachine()
         self.base_commit_sha = "unknown"
+        self.sandbox_info: Dict[str, Any] = {}
         self.repro_res: Optional[ReproductionResult] = None
+        self.baseline_info: Dict[str, Any] = {}
         self.patch_res: Optional[PatchLoopResult] = None
         self.regr_res: Optional[RegressionReport] = None
+        self.scope_res: Optional[ScopeReport] = None
         self.decision: Optional[AdmissionDecision] = None
         self.diff_text = ""
-        self.diff_stats: Dict[str, Any] = {"files": [], "lines_added": 0, "lines_deleted": 0, "total_lines": 0}
         self.diff_hash = ""
         self.pr_info: Dict[str, Any] = {}
         self.github_enabled = False
+        self.refusal: Dict[str, Any] = {}
         self.artifact_path: Optional[str] = None
+        self.written = False
 
-    def fail(self, state: PipelineState, stage: str, reason: str) -> bool:
-        """Move to a terminal rejection or error state and write the artifact."""
+    def refuse(self, code: RefusalCode, stage: str, reason: str) -> bool:
+        return self._stop(PipelineState.REFUSED, stage, reason, code)
+
+    def error(self, stage: str, reason: str) -> bool:
+        return self._stop(PipelineState.ERROR, stage, reason, None)
+
+    def _stop(self, state: PipelineState, stage: str, reason: str, code: Optional[RefusalCode]) -> bool:
         if not self.sm.is_terminal:
             self.sm.transition(state)
-        log_event(self.run_id, stage, "FAIL", self.issue_number, reason)
-        print(f"  [FAIL] {reason}")
+        self.refusal = {"code": code.value if code else None, "stage": stage, "message": reason}
+        log_event(self.run_id, stage, state.value, self.issue_number, reason)
+        print(f"  [{state.value}] {reason}")
         self.finish(reason)
         _print_summary(
             mode=self.mode,
             issue_number=self.issue_number,
-            status="PR BLOCKED",
             final_state=self.sm.state.value,
-            reason=reason,
+            reason=f"{code.value}: {reason}" if code else reason,
             artifact_path=self.artifact_path or "N/A",
         )
         return False
 
     def finish(self, reason: Optional[str]) -> None:
-        blast = self.regr_res.blast_radius if self.regr_res else None
+        scope = self.scope_res
+        red = self.repro_res
         self.artifact_path = write_run_artifact(
             run_id=self.run_id,
             issue_number=self.issue_number,
             issue_title=self.issue_title,
             pipeline_state_history=[s.value for s in self.sm.history],
             admission_decision=self.decision.to_dict() if self.decision else {},
-            regression_results=(
-                {
-                    "passed": self.regr_res.passed_count,
-                    "failed": self.regr_res.failed_count,
-                    "total": self.regr_res.total_tests,
-                }
-                if self.regr_res
-                else {}
-            ),
-            blast_radius=(
-                {
-                    "files_changed": blast.observed_files,
-                    "lines_added": blast.lines_added,
-                    "lines_deleted": blast.lines_deleted,
-                    "is_acceptable": blast.is_acceptable,
-                }
-                if blast
-                else {}
-            ),
+            regression_results=self.regr_res.to_dict() if self.regr_res else {},
+            blast_radius=scope.to_dict() if scope else {},
             patch_attempts=self.patch_res.total_attempts if self.patch_res else 0,
             reached_green=bool(self.patch_res and self.patch_res.reached_green),
             base_commit_sha=self.base_commit_sha,
@@ -148,19 +141,37 @@ class _RunRecorder:
             execution_mode=self.mode,
             patch_changed=bool(self.decision and self.decision.patch_changed),
             diff_hash=self.diff_hash,
-            diff_files=self.diff_stats["files"],
-            diff_lines_added=self.diff_stats["lines_added"],
-            diff_lines_deleted=self.diff_stats["lines_deleted"],
+            diff_files=scope.changed_files if scope else [],
+            diff_lines_added=scope.lines_added if scope else 0,
+            diff_lines_deleted=scope.lines_deleted if scope else 0,
             patch_verified_against_test=bool(self.patch_res and self.patch_res.reached_green),
             github_integration_enabled=self.github_enabled,
             pr_created=(self.pr_info.get("status") == "published"),
             pr_url=self.pr_info.get("pr_url"),
             admission_rejection_reason=reason,
             final_state=self.sm.state.value,
-            reproduction_test_code=self.repro_res.test_code if self.repro_res else "",
-            reproduction_output=self.repro_res.raw_output if self.repro_res else "",
+            reproduction_test_code=red.test_code if red else "",
+            reproduction_output=red.raw_output if red else "",
             diff_text=self.diff_text,
+            sections={
+                "refusal": self.refusal or None,
+                "sandbox": self.sandbox_info,
+                "red_gate": (
+                    {
+                        "reproduced": red.reproduced,
+                        "runs": red.runs,
+                        "failing_test_ids": red.failing_test_ids,
+                        "failure_types": red.failure_types,
+                        "refusal_code": red.refusal_code,
+                        "message": red.error_message,
+                    }
+                    if red
+                    else None
+                ),
+                "baseline": self.baseline_info or None,
+            },
         )
+        self.written = True
 
 
 def run_pipeline(
@@ -176,46 +187,68 @@ def run_pipeline(
     run_id: Optional[str] = None,
     repro_test_code: Optional[str] = None,
     patch_generator: Optional[PatchGenerator] = None,
+    sandbox_isolation: Optional[str] = None,
 ) -> bool:
     """Run the verification pipeline for one issue. Returns True only when admitted.
 
     Args:
-        repro_test_code: a caller-supplied reproduction test. It is held to the
-            same RED gate as a generated one.
-        patch_generator: a caller-supplied `(attempt, feedback) -> diff` callable,
-            for example a `ScriptedPatchGenerator` over a human-authored diff.
+        repro_test_code: a caller-supplied reproduction test, held to the RED gate.
+        patch_generator: a caller-supplied `(attempt, feedback) -> diff` callable.
+        sandbox_isolation: "docker" (default) or "host-unsafe" (trusted fixtures only).
     """
     run_id = run_id or f"run_{uuid.uuid4().hex[:10]}"
     cfg = load_config()
     rec = _RunRecorder(run_id, issue_number, issue_title, mode, cfg.run_artifacts_dir)
-    sm = rec.sm
 
     print("=" * 60)
     print("Cerberus: verification gate for bug-fix patches")
     print(f"Run ID: {run_id} | Issue #{issue_number} | Mode: {mode.upper()}")
     print("=" * 60)
 
+    try:
+        isolation = resolve_isolation(sandbox_isolation)
+    except SandboxError as exc:
+        return rec.error("CONFIG", str(exc))
+    rec.sandbox_info = {"isolation": isolation}
+    if mode == "github" and isolation == ISOLATION_HOST_UNSAFE:
+        return rec.error("CONFIG", "GitHub mode requires the Docker sandbox; host-unsafe execution can never publish.")
     if mode == "github" and not dry_run and not cfg.github_token:
-        return rec.fail(PipelineState.ERROR, "CONFIG", "GitHub mode requested but GITHUB_TOKEN is not configured.")
+        return rec.error("CONFIG", "GitHub mode requested but GITHUB_TOKEN is not configured.")
 
     try:
-        with Sandbox(base_dir=repo_dir, timeout_sec=cfg.sandbox_timeout_seconds) as sb:
+        try:
+            sb = Sandbox(base_dir=repo_dir, timeout_sec=cfg.sandbox_timeout_seconds, isolation=isolation)
+        except SandboxError as exc:
+            return rec.error("SANDBOX", str(exc))
+        with sb:
+            rec.base_commit_sha = sb.base_commit or "unknown"
+            rec.sandbox_info.update({
+                "image": sb.image if sb.is_docker else None,
+                "source_dirty": sb.source_dirty,
+            })
             return _run_in_sandbox(
-                sb, rec, cfg, issue_number, issue_title, issue_body, dry_run, mode,
+                sb, rec, cfg, repo_dir, issue_number, issue_title, issue_body, dry_run, mode,
                 use_llm, use_llm_repro, fork_owner, repro_test_code, patch_generator,
             )
     except Exception as exc:
-        if not sm.is_terminal:
-            sm.transition(PipelineState.ERROR)
+        if not rec.sm.is_terminal:
+            rec.sm.transition(PipelineState.ERROR)
+            rec.refusal = {"code": None, "stage": "PIPELINE", "message": f"{type(exc).__name__}: {exc}"}
             log_event(run_id, "PIPELINE", "ERROR", issue_number, f"{type(exc).__name__}: {exc}")
             rec.finish(f"Unhandled error: {type(exc).__name__}: {exc}")
         raise
+    finally:
+        if not rec.sm.is_terminal:
+            # A code path returned without deciding. That is a bug, recorded as one.
+            rec.sm.transition(PipelineState.ERROR)
+            rec.finish("Pipeline exited without reaching a terminal state.")
 
 
 def _run_in_sandbox(
     sb: Sandbox,
     rec: _RunRecorder,
     cfg: Any,
+    repo_dir: str,
     issue_number: int,
     issue_title: str,
     issue_body: str,
@@ -230,108 +263,101 @@ def _run_in_sandbox(
     sm = rec.sm
     run_id = rec.run_id
 
-    # The gates compare the workspace against a commit. Without one there is no
-    # base to diff against, so the run cannot produce evidence at all.
-    head = sb.exec("git rev-parse --verify HEAD")
-    if head.exit_code != 0:
-        return rec.fail(
-            PipelineState.ERROR,
-            "SETUP",
-            "Repository is not a git repository with at least one commit; there is no base revision to verify against.",
-        )
-    rec.base_commit_sha = head.stdout.strip()
-    sb.exec("git config user.name \"Cerberus\"")
-    sb.exec("git config user.email \"cerberus@autonomous.local\"")
+    if sb.source_dirty:
+        print("  [WARN] The source repository has uncommitted changes; only the committed HEAD is verified.")
 
-    setup_agent = RepoSetupAgent(sb)
-    setup_plan = setup_agent.detect()
-
-    # [1/8] TRIAGE
-    print("\n[1/8] TRIAGE")
+    # TRIAGE (reads files only; nothing executes in the sandbox yet)
+    print("\n[1/9] TRIAGE")
     sm.transition(PipelineState.TRIAGE_PENDING)
-    log_event(run_id, "TRIAGE", "STARTED", issue_number, "Starting triage")
-    triage = TriageAgent(sb)
-    triage_report = triage.triage_issue(issue_number, issue_title, issue_body)
+    triage_report = TriageAgent(sb).triage_issue(issue_number, issue_title, issue_body)
     sm.transition(PipelineState.TRIAGED)
     print(f"  [OK] Base commit: {rec.base_commit_sha[:12]}")
     print(f"  [OK] Error signatures: {', '.join(triage_report.error_signatures) or 'none found'}")
-    print(f"  [OK] Repo setup: {setup_plan.package_manager}/{setup_plan.test_framework} ({setup_plan.reason})")
-    log_event(run_id, "TRIAGE", "PASS", issue_number, "Triage complete")
 
     target_code_file = _parse_referenced_file(issue_body, sb.workspace_dir)
     if not target_code_file:
         existing = [f for f in triage_report.referenced_files if os.path.isfile(os.path.join(sb.workspace_dir, f))]
         target_code_file = existing[0] if existing else None
 
-    sm.transition(PipelineState.INDEXING)
-    sm.transition(PipelineState.INDEXED)
+    # SETUP (the only phase with network access in Docker mode)
+    print("\n[2/9] SETUP")
+    sm.transition(PipelineState.SETUP_PENDING)
+    setup_plan = RepoSetupAgent(sb).detect()
+    print(f"  [OK] {setup_plan.reason}")
+    for cmd in setup_plan.install_commands:
+        print(f"  -> {cmd}")
+    results = sb.run_setup(setup_plan.install_commands, timeout=max(cfg.sandbox_timeout_seconds, 600))
+    failed = [r for r in results if r.exit_code != 0]
+    if failed:
+        return rec.error("SETUP", f"Dependency installation failed: {failed[0].output[-1000:]}")
+    rec.sandbox_info["setup_commands"] = setup_plan.install_commands
+    rec.sandbox_info["setup_skipped"] = sb.setup_skipped
+    if sb.setup_skipped:
+        print("  [WARN] host-unsafe sandbox: dependency installation skipped")
+    sm.transition(PipelineState.SETUP_COMPLETE)
 
-    if setup_plan.install_commands:
-        print("\n[SETUP] DEPENDENCIES")
-        for cmd in setup_plan.install_commands:
-            print(f"  -> {cmd}")
-        if not setup_agent.install(setup_plan, timeout=max(cfg.sandbox_timeout_seconds, 120)):
-            return rec.fail(PipelineState.ERROR, "SETUP", "Repository dependency installation failed.")
-        print("  [OK] Repository dependencies installed")
-
-    # [2/8] REPRODUCTION
-    print("\n[2/8] REPRODUCTION")
+    # REPRODUCTION + RED
+    print("\n[3/9] REPRODUCTION / RED GATE")
     sm.transition(PipelineState.REPRODUCTION_PENDING)
-    log_event(run_id, "REPRODUCTION", "STARTED", issue_number, "Obtaining reproduction test")
-    repro_agent = ReproductionAgent(sb)
+    repro_agent = ReproductionAgent(sb, error_signatures=triage_report.error_signatures)
     repro_tokens = 0
-
     if repro_test_code:
         print("  -> Using caller-supplied reproduction test")
         rec.repro_res = repro_agent.run_reproduction_gate(issue_title, issue_body, repro_test_code)
     elif _llm_repro_enabled(use_llm_repro):
         if not has_api_key():
-            return rec.fail(
-                PipelineState.REJECTED_NON_REPRODUCIBLE,
-                "REPRODUCTION",
+            return rec.refuse(
+                RefusalCode.NO_REPRODUCTION_TEST, "REPRODUCTION",
                 "Model reproduction was requested but no ANTHROPIC_API_KEY/OPENAI_API_KEY/GEMINI_API_KEY is set.",
             )
         if not target_code_file:
-            return rec.fail(
-                PipelineState.REJECTED_NON_REPRODUCIBLE,
-                "REPRODUCTION",
+            return rec.refuse(
+                RefusalCode.NO_REPRODUCTION_TEST, "REPRODUCTION",
                 "Model reproduction needs a concrete source file referenced in the issue (e.g. 'at path/to/file.py:12').",
             )
         print(f"  -> Model-generated reproduction test, boundary: {target_code_file}")
         repro_synth = LLMReproductionSynthesizer(
-            sandbox=sb,
-            candidate_files=[target_code_file],
-            issue_title=issue_title,
-            issue_body=issue_body,
+            sandbox=sb, candidate_files=[target_code_file], issue_title=issue_title, issue_body=issue_body,
         )
         print(f"  -> Model: {repro_synth.model}")
         rec.repro_res = repro_synth.synthesize_and_verify(max_attempts=3)
         repro_tokens = repro_synth.usage.total_tokens
     else:
-        return rec.fail(
-            PipelineState.REJECTED_NON_REPRODUCIBLE,
-            "REPRODUCTION",
+        return rec.refuse(
+            RefusalCode.NO_REPRODUCTION_TEST, "REPRODUCTION",
             "No reproduction test is available: supply one (--repro-test) or enable model reproduction (--use-llm-repro).",
         )
 
-    # [3/8] RED GATE
-    print("\n[3/8] RED GATE")
     if not rec.repro_res.reproduced:
-        return rec.fail(
-            PipelineState.REJECTED_NON_REPRODUCIBLE,
-            "RED_GATE",
-            f"RED gate not satisfied: {rec.repro_res.error_message}",
-        )
+        code = RefusalCode(rec.repro_res.refusal_code or RefusalCode.RED_NOT_FAILING.value)
+        return rec.refuse(code, "RED_GATE", rec.repro_res.error_message)
     sm.transition(PipelineState.REPRODUCED_RED)
     log_event(run_id, "RED_GATE", "PASS", issue_number, "RED reproduction confirmed")
-    print("  [OK] RED reproduction confirmed (test fails on unpatched repo)")
+    print(f"  [OK] RED confirmed in {rec.repro_res.runs}/{rec.repro_res.runs} runs: " + ", ".join(
+        f"{tid} ({rec.repro_res.failure_types.get(tid) or '?'})" for tid in rec.repro_res.failing_test_ids
+    ))
 
-    # [4/8] LOCALIZATION
-    print("\n[4/8] LOCALIZATION")
+    # BASELINE
+    print("\n[4/9] BASELINE")
+    sm.transition(PipelineState.BASELINE_PENDING)
+    if not setup_plan.test_command:
+        return rec.refuse(RefusalCode.NO_TEST_COMMAND, "BASELINE", "No test command was detected for this repository.")
+    regr_agent = RegressionAgent(sb)
+    baseline = regr_agent.record_baseline(setup_plan.test_command)
+    if baseline.report is None:
+        return rec.refuse(RefusalCode.BASELINE_UNVERIFIABLE, "BASELINE", f"Baseline test results are unusable: {baseline.error}")
+    rec.baseline_info = {
+        "test_command": setup_plan.test_command,
+        "total": baseline.report.total,
+        "failing": baseline.report.ids_with("failed", "error"),
+    }
+    sm.transition(PipelineState.BASELINE_RECORDED)
+    print(f"  [OK] {baseline.report.total} tests, {len(rec.baseline_info['failing'])} already failing")
+
+    # LOCALIZATION
+    print("\n[5/9] LOCALIZATION")
     sm.transition(PipelineState.LOCALIZATION_PENDING)
-    log_event(run_id, "LOCALIZATION", "STARTED", issue_number, "Localizing fault")
-    localizer = LocalizationAgent(sb)
-    loc_res = localizer.localize(
+    loc_res = LocalizationAgent(sb).localize(
         issue_title=issue_title,
         issue_body=issue_body,
         error_signatures=triage_report.error_signatures,
@@ -342,160 +368,123 @@ def _run_in_sandbox(
     top_cand = top_matches[0] if top_matches else (loc_res.candidates[0] if loc_res.candidates else None)
     top_file = top_cand.file if top_cand else target_code_file
     if not top_file:
-        return rec.fail(PipelineState.ERROR, "LOCALIZATION", "Could not localize a repair target file.")
+        return rec.refuse(RefusalCode.NOT_LOCALIZED, "LOCALIZATION", "Could not localize a repair target file.")
     sm.transition(PipelineState.LOCALIZED)
-    print(f"  [OK] Top-1 candidate: {top_file}::{top_cand.symbol if top_cand else '<module>'}")
-    log_event(run_id, "LOCALIZATION", "PASS", issue_number, f"Top candidate: {top_file}")
+    print(f"  [OK] Allowed scope: {top_file}")
 
-    # [5/8] PATCH LOOP
-    print("\n[5/8] PATCH LOOP")
+    # PATCH LOOP + GREEN
+    print("\n[6/9] PATCH LOOP / GREEN GATE")
     sm.transition(PipelineState.PATCH_PENDING)
-    log_event(run_id, "PATCH_LOOP", "STARTED", issue_number, "Entering patch loop")
-
-    token_usage: Optional[Dict[str, int]] = None
     generator: Optional[PatchGenerator] = patch_generator
     llm_generator: Optional[LLMPatchGenerator] = None
-
     if generator is not None:
         print("  -> Using caller-supplied patch generator")
     elif _llm_patching_enabled(use_llm):
         if not has_api_key():
-            return rec.fail(
-                PipelineState.REJECTED_PATCH_FAILED,
-                "PATCH_LOOP",
+            return rec.refuse(
+                RefusalCode.NO_PATCH_SOURCE, "PATCH_LOOP",
                 "Model patching was requested but no ANTHROPIC_API_KEY/OPENAI_API_KEY/GEMINI_API_KEY is set.",
             )
-        llm_generator = LLMPatchGenerator(
-            sandbox=sb,
-            candidate_files=[top_file],
-            issue_title=issue_title,
-            issue_body=issue_body,
-        )
+        llm_generator = LLMPatchGenerator(sandbox=sb, candidate_files=[top_file], issue_title=issue_title, issue_body=issue_body)
         generator = llm_generator
-        print(f"  -> Model-generated patches, boundary: {top_file}")
-        print(f"  -> Model: {llm_generator.model}")
+        print(f"  -> Model-generated patches, boundary: {top_file} (model {llm_generator.model})")
     else:
-        return rec.fail(
-            PipelineState.REJECTED_PATCH_FAILED,
-            "PATCH_LOOP",
+        return rec.refuse(
+            RefusalCode.NO_PATCH_SOURCE, "PATCH_LOOP",
             "No patch source is configured: supply a patch (--patch) or enable model patching (--use-llm).",
         )
 
-    patch_agent = PatchAgent(sb, max_lines_changed=cfg.patch_max_lines_changed)
-    loop_res = patch_agent.run_patch_loop([top_file], generator)
+    loop_res = PatchAgent(sb, max_lines_changed=cfg.patch_max_lines_changed).run_patch_loop(
+        [top_file], generator, verifier=repro_agent.green_verifier(rec.repro_res),
+    )
     print(f"  -> {loop_res.total_attempts} attempt(s)")
-
+    token_usage: Optional[Dict[str, int]] = None
     if llm_generator is not None:
         token_usage = {
             "prompt_tokens": llm_generator.usage.prompt_tokens,
             "completion_tokens": llm_generator.usage.completion_tokens,
             "total_tokens": llm_generator.usage.total_tokens + repro_tokens,
         }
-        print(f"  -> {llm_generator.usage.total_tokens} tokens (patch)")
     elif repro_tokens > 0:
         token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": repro_tokens}
 
-    # The diff is read back off the workspace, so what gets measured, gated, and
-    # published is the state of the files on disk rather than what the
-    # generator claimed it was changing.
-    rec.diff_text = DiffUtils.get_workspace_diff(sb)
-    rec.diff_stats = DiffUtils.compute_diff_stats(rec.diff_text)
-    rec.diff_hash = DiffUtils.compute_diff_hash(rec.diff_text)
+    changes = DiffUtils.workspace_changes(sb)
+    rec.diff_text = changes.diff_text
+    rec.diff_hash = DiffUtils.compute_diff_hash(changes.diff_text)
     rec.patch_res = PatchLoopResult(
         reached_green=loop_res.reached_green,
         total_attempts=loop_res.total_attempts,
-        winning_diff=rec.diff_text,
+        winning_diff=changes.diff_text,
         history=loop_res.history,
-        total_lines_changed=rec.diff_stats["total_lines"],
-        final_changed_files=rec.diff_stats["files"],
+        total_lines_changed=changes.total_lines,
+        final_changed_files=changes.files,
         diff_hash=rec.diff_hash,
-        is_empty_diff=rec.diff_stats["is_empty"],
+        is_empty_diff=changes.is_empty,
     )
-
     if not loop_res.reached_green:
-        return rec.fail(
-            PipelineState.REJECTED_PATCH_FAILED,
-            "PATCH_LOOP",
+        return rec.refuse(
+            RefusalCode.GREEN_NOT_REACHED, "PATCH_LOOP",
             f"No candidate patch made the reproduction test pass after {loop_res.total_attempts} attempt(s).",
         )
+    green = repro_agent.verify_green(rec.repro_res, runs=GREEN_VERIFICATION_RUNS)
+    if not green.passed:
+        rec.patch_res.reached_green = False
+        return rec.refuse(RefusalCode(green.refusal_code), "GREEN_GATE", green.message)
     sm.transition(PipelineState.PATCH_GREEN)
-    print("  [OK] Target test GREEN (verified on the modified workspace)")
-    log_event(run_id, "PATCH_LOOP", "PASS", issue_number, "Patch reached GREEN")
+    print(f"  [OK] GREEN confirmed in {GREEN_VERIFICATION_RUNS}/{GREEN_VERIFICATION_RUNS} runs")
 
-    # [6/8] REGRESSION
-    print("\n[6/8] REGRESSION")
+    # REGRESSION
+    print("\n[7/9] REGRESSION")
     sm.transition(PipelineState.REGRESSION_PENDING)
-    log_event(run_id, "REGRESSION", "STARTED", issue_number, "Running regression suite")
-    if not setup_plan.test_command:
-        return rec.fail(
-            PipelineState.REJECTED_REGRESSION,
-            "REGRESSION",
-            "No regression test command was detected for this repository.",
-        )
-    regr_agent = RegressionAgent(sb, max_total_lines=cfg.patch_max_lines_changed)
-    rec.regr_res = regr_agent.run_regression_suite([top_file], test_suite_cmd=setup_plan.test_command)
-    blast = rec.regr_res.blast_radius
-    blast.observed_files = rec.diff_stats["files"]
-    blast.lines_added = rec.diff_stats["lines_added"]
-    blast.lines_deleted = rec.diff_stats["lines_deleted"]
-    print(f"  -> {rec.regr_res.passed_count} passed, {rec.regr_res.failed_count} failed, {rec.regr_res.error_count} errors")
-    rec.decision = AdmissionController.evaluate(rec.patch_res, rec.regr_res)
-
-    if not rec.decision.regression_passed:
-        return rec.fail(
-            PipelineState.REJECTED_REGRESSION,
-            "REGRESSION",
-            f"Regression suite did not pass ({rec.regr_res.failed_count} failed, {rec.regr_res.error_count} errors).",
-        )
+    rec.regr_res = regr_agent.run_regression_suite(setup_plan.test_command, baseline.report)
+    r = rec.regr_res
+    if not r.results_parsed:
+        return rec.refuse(RefusalCode.REGRESSION_UNVERIFIABLE, "REGRESSION", f"Test results after the patch are unusable: {r.error_message}")
+    print(f"  -> {r.passed_count}/{r.total_tests} passing; newly failing {len(r.newly_failing)}, "
+          f"pre-existing {len(r.preexisting_failures)}, flaky {len(r.flaky_tests)}")
+    if not r.regression_free:
+        detail = ", ".join(r.newly_failing + [f"{t} (no longer runs)" for t in r.missing_tests])
+        return rec.refuse(RefusalCode.REGRESSION, "REGRESSION", f"The patch introduced regressions: {detail}")
     sm.transition(PipelineState.REGRESSION_CLEAN)
-    log_event(run_id, "REGRESSION", "PASS", issue_number, "Regression suite clean")
 
-    # [7/8] BLAST RADIUS
-    print("\n[7/8] BLAST RADIUS")
-    sm.transition(PipelineState.BLAST_RADIUS_PENDING)
-    if not blast.is_acceptable:
-        return rec.fail(
-            PipelineState.REJECTED_BLAST_RADIUS,
-            "BLAST_RADIUS",
-            f"Scope violation: {blast.scope_violation_reason}",
-        )
-    sm.transition(PipelineState.BLAST_RADIUS_ACCEPTABLE)
-    print(f"  [OK] Files changed: {len(blast.observed_files)} (+{blast.lines_added}/-{blast.lines_deleted} lines)")
-    log_event(run_id, "BLAST_RADIUS", "PASS", issue_number, "Blast radius acceptable")
+    # SCOPE
+    print("\n[8/9] SCOPE")
+    sm.transition(PipelineState.SCOPE_PENDING)
+    rec.scope_res = analyze_scope(
+        sb, allowed_files=[top_file], max_files=MAX_SCOPE_FILES, max_lines=cfg.patch_max_lines_changed, changes=changes,
+    )
+    s = rec.scope_res
+    print(f"  -> files {s.changed_files} (+{s.lines_added}/-{s.lines_deleted}); symbols {s.changed_symbols or 'none identified'}")
+    if not s.is_acceptable:
+        return rec.refuse(RefusalCode.SCOPE_VIOLATION, "SCOPE", s.violation_reason or "Scope violation")
+    sm.transition(PipelineState.SCOPE_ACCEPTABLE)
 
-    # [8/8] ADMISSION
-    print("\n[8/8] ADMISSION")
+    # ADMISSION
+    print("\n[9/9] ADMISSION")
     sm.transition(PipelineState.ADMISSION_PENDING)
-    decision = rec.decision
-    print(f"  Target Test Gate:   {'PASS' if decision.target_test_passed else 'FAIL'}")
-    print(f"  Regression Gate:    {'PASS' if decision.regression_passed else 'FAIL'}")
-    print(f"  Blast Radius Gate:  {'PASS' if decision.blast_radius_acceptable else 'FAIL'}")
-    print(f"  Patch Changed Gate: {'PASS' if decision.patch_changed else 'FAIL'}")
-
+    rec.decision = decision = AdmissionController.evaluate(rec.patch_res, rec.regr_res, rec.scope_res)
+    for reason in decision.reasons:
+        print(f"  {reason}")
     if not decision.approved:
-        state = (
-            PipelineState.REJECTED_EMPTY_PATCH
-            if decision.rejection_state == "REJECTED_EMPTY_PATCH"
-            else PipelineState.REJECTED_ADMISSION
-        )
-        return rec.fail(state, "ADMISSION", decision.rejection_summary)
-
+        return rec.refuse(RefusalCode(decision.rejection_state), "ADMISSION", decision.rejection_summary)
     sm.transition(PipelineState.ADMITTED)
-    log_event(run_id, "ADMISSION", "PASS", issue_number, "PR admitted")
+    log_event(run_id, "ADMISSION", "ADMITTED", issue_number, "All gates passed")
 
-    # Publication is gated on the admission decision: this point is unreachable
-    # unless all four gates held.
+    # Publication is gated on admission, and only a Docker-verified run may publish.
+    publish = mode == "github" and not dry_run and sb.is_docker
     rec.github_enabled = mode == "github" and bool(cfg.github_token)
-    publisher = PRPublisher(sb, github_token=cfg.github_token)
+    publisher = PRPublisher(github_token=cfg.github_token)
     pr_body = publisher.build_evidence_report(
         issue_number=issue_number,
         issue_title=issue_title,
         reproduction_res=rec.repro_res,
         patch_res=rec.patch_res,
         regression_res=rec.regr_res,
+        scope_res=rec.scope_res,
         decision=decision,
         branch_name=triage_report.working_branch,
         token_usage=token_usage,
+        base_commit=rec.base_commit_sha,
     )
     rec.pr_info = publisher.publish_pr(
         issue_number=issue_number,
@@ -503,28 +492,30 @@ def _run_in_sandbox(
         repo_slug=cfg.github_repo_slug or "org/repo",
         branch_name=triage_report.working_branch,
         pr_body=pr_body,
-        dry_run=dry_run or mode == "local",
+        dry_run=not publish,
         fork_owner=fork_owner,
+        diff_text=rec.diff_text,
+        source_repo_dir=repo_dir,
+        base_commit=rec.base_commit_sha,
     )
     rec.finish(None)
 
-    if rec.pr_info.get("status") == "error":
-        pr_display = f"PR PUBLISH FAILED: {rec.pr_info.get('error')}"
-    elif rec.pr_info.get("status") == "published":
-        pr_display = rec.pr_info.get("pr_url") or "published (no URL returned)"
+    status = rec.pr_info.get("status")
+    if status == "error":
+        pr_display = f"PUBLISH FAILED: {rec.pr_info.get('error')}"
+    elif status == "published":
+        pr_display = rec.pr_info.get("pr_url") or "published"
     else:
         pr_display = rec.pr_info.get("display_url") or "NOT CREATED"
-        pr_display = pr_display.removeprefix("PR: ")
 
     _print_summary(
         mode=mode,
         issue_number=issue_number,
-        status="ADMITTED",
         final_state=sm.state.value,
         reason="All 4 verification gates passed.",
         artifact_path=rec.artifact_path or "N/A",
         attempts=rec.patch_res.total_attempts,
-        patch_stat=f"+{blast.lines_added}/-{blast.lines_deleted} in {len(blast.observed_files)} file(s), hash {rec.diff_hash[:12]}",
+        patch_stat=f"+{s.lines_added}/-{s.lines_deleted} in {len(s.changed_files)} file(s), hash {rec.diff_hash[:12]}",
         pr_link=pr_display,
     )
     return True
@@ -533,7 +524,6 @@ def _run_in_sandbox(
 def _print_summary(
     mode: str,
     issue_number: int,
-    status: str,
     final_state: str,
     reason: str,
     artifact_path: str,
@@ -546,7 +536,6 @@ def _print_summary(
     print("========================================")
     print(f"Mode: {mode.upper()}")
     print(f"Issue: #{issue_number}")
-    print(f"Status: {status}")
     print(f"Final state: {final_state}")
     if attempts is not None:
         print(f"Patch attempts: {attempts}")
@@ -571,7 +560,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--title", default="", help="Issue title")
     parser.add_argument("--body", default="", help="Issue body")
     parser.add_argument("--mode", choices=["local", "github"], default="local",
-                        help="local never publishes; github may publish when not --dry-run")
+                        help="local never publishes; github may publish a draft PR when not --dry-run")
     parser.add_argument("--dry-run", action="store_true", default=False, help="Do not push or open a PR")
     parser.add_argument("--repro-test", metavar="PATH", help="Reproduction test file to hold to the RED gate")
     parser.add_argument("--patch", metavar="PATH", help="Unified diff to verify as the candidate patch")
@@ -581,11 +570,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
                         help="Generate the reproduction test with a model. Also CERBERUS_USE_LLM_REPRO=1.")
     parser.add_argument("--demo", action="store_true", default=False,
                         help="Run the deterministic rate_calculator example (examples/rate_calculator).")
+    parser.add_argument("--unsafe-local-sandbox", action="store_true", default=False,
+                        help="Run repository code on this machine without container isolation. "
+                             "Trusted local fixtures only; can never publish.")
     return parser
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = _build_arg_parser().parse_args(argv)
+    isolation = ISOLATION_HOST_UNSAFE if args.unsafe_local_sandbox else None
 
     if args.demo:
         from examples.demo import prepare_rate_calculator_demo
@@ -601,6 +594,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 mode="local",
                 repro_test_code=scenario.repro_test_code,
                 patch_generator=ScriptedPatchGenerator([scenario.patch_diff]),
+                sandbox_isolation=isolation,
             )
         return 0 if admitted else 1
 
@@ -619,6 +613,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         use_llm_repro=args.use_llm_repro,
         repro_test_code=_read_text(args.repro_test) if args.repro_test else None,
         patch_generator=ScriptedPatchGenerator([_read_text(args.patch)]) if args.patch else None,
+        sandbox_isolation=isolation,
     )
     return 0 if admitted else 1
 

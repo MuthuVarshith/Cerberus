@@ -3,70 +3,71 @@
 **A verification gate that decides whether a bug-fix patch has earned the right to become a pull request.**
 
 Cerberus does not try to be a general coding agent. A patch can come from a person, a script, or a model; Cerberus
-holds it to the same evidence: a reproduction test that fails on the unpatched code (RED), passes with the patch
-(GREEN), no regressions in the repository's test suite, and a change that stays inside an allowed scope. If any
-check fails, the run is refused and the reason is recorded.
+holds it to the same evidence: a reproduction test that fails on the unpatched code for the right reason (RED),
+passes with the patch (GREEN), no test that newly fails relative to a baseline run, and a change that stays inside an
+allowed scope. If any check cannot be satisfied or cannot be verified, the run is refused and the reason is recorded.
 
-> **Status: research prototype, Python/pytest repositories only.** This README describes only what the code in
-> this repository does today. Work in progress and known gaps are tracked in
+> **Status: research prototype for Python/pytest repositories.** This README describes only what the code in this
+> repository does and what its tests exercise. Progress, decisions and known gaps are tracked in
 > [`CERBERUS_PROGRESS.md`](CERBERUS_PROGRESS.md).
 
-## What is implemented
+## The gates
 
-| Capability | State |
-| --- | --- |
-| RED gate: supplied or model-generated reproduction test must fail on the base commit | Implemented; accepts any non-syntax failure (see limitations) |
-| GREEN gate: candidate patch must make the reproduction test pass | Implemented; an empty test command is rejected, never counted as a pass |
-| Regression gate: repository test suite must pass after the patch | Implemented; not yet baseline-aware |
-| Scope gate: changed files must be inside the localized boundary, ≤ 3 files, ≤ 200 lines | Implemented; tracked files only |
-| Admission: all four gates as one conjunction, then publish | Implemented |
-| Run record: `artifacts/<run_id>/run.json` written on every exit path, with final state, base commit, reproduction test and diff | Implemented |
-| Patch sources: a diff file (`--patch`), or a model via `litellm` (`--use-llm`) | Implemented |
-| Reproduction sources: a test file (`--repro-test`), or a model (`--use-llm-repro`) | Implemented |
-| GitHub webhook (`/webhook`, HMAC-verified, fails closed) and PR publisher | Implemented; dry-run by default |
-| Docker sandbox | Code path exists but falls back to **host execution** when Docker is unavailable — not a security boundary yet |
+| Gate | Passes only when | Evidence recorded |
+| --- | --- | --- |
+| **RED** | The reproduction test parses; imports repository code and references a symbol the issue names (when it names one); runs with a JUnit report; has no setup/collection errors; fails because of an assertion, `pytest.fail`/`DID NOT RAISE`, an exception type named in the issue, or an exception raised inside repository code; and fails identically in 3 runs. Import and syntax errors never count. | failing test IDs, exception types, runs |
+| **Baseline** | The repository's pytest command produces a readable JUnit report on the unpatched commit. | test count, already-failing test IDs |
+| **GREEN** | With the patch, the unmodified reproduction test passes in 3 of 3 runs, with no failures, errors or skips. A modified reproduction test is refused. | attempts, per-attempt failures |
+| **Regression** | No test that passed at baseline now fails, errors, or stops running. Failures that already existed at baseline are reported, not counted. Suspected regressions are re-run on the base code; tests that fail there too are reported as flaky. Unreadable results are refused, never passed. | newly failing, pre-existing, flaky |
+| **Scope** | Every changed file — including newly created and deleted files — is inside the allowed scope (the localized file), at most 3 files and 200 changed lines. | files, new/deleted files, lines, changed Python functions/classes |
+| **Admission** | GREEN, regression, scope, and a non-whitespace change against the base commit all hold. | decision and reasons |
 
-Cerberus never writes its own reproduction test or patch as a fallback. With no reproduction test the run is
-refused at RED; with no patch source it is refused at the patch stage.
+Every run ends in exactly one terminal state — `ADMITTED`, `REFUSED` (with a refusal code such as `RED_WRONG_REASON`
+or `SCOPE_VIOLATION`), or `ERROR` — enforced by the transition graph in
+[`harness/pipeline_state.py`](autonomous-pr-fixer/harness/pipeline_state.py), and writes
+`artifacts/<run_id>/run.json`.
 
-## Pipeline
+Cerberus never writes its own reproduction test or patch as a fallback.
 
-```text
-Issue ─► Triage ─► Reproduction ─► RED gate ─► Localization ─► Patch loop (GREEN gate)
-                         │ refuse         │ refuse                     │ refuse
-                         ▼                ▼                            ▼
-                    run.json          run.json                     run.json
+## Sandbox
 
-Patch loop ─► Regression gate ─► Scope gate ─► Admission ─► Evidence report ─► PR (only if admitted)
-                   │ refuse          │ refuse       │ refuse
-                   ▼                 ▼              ▼
-               run.json          run.json       run.json
-```
+Repository code never runs with your credentials.
 
-Every run ends in a named state (`ADMITTED`, a `REJECTED_*` state, or `ERROR`) enforced by a transition graph in
-[`harness/pipeline_state.py`](autonomous-pr-fixer/harness/pipeline_state.py).
+- **Docker (default).** Fails closed if Docker or the sandbox image is unavailable. Dependency installation runs in a
+  networked setup container that is then committed to an image; every repair-phase command runs in a container from
+  that image with `--network none`, all capabilities dropped, `no-new-privileges`, memory/CPU/PID limits, a tmpfs
+  `/tmp`, an in-container kill timeout, and no host environment variables.
+- **`--unsafe-local-sandbox`.** Runs on the host as your user, for trusted local fixtures only: prints a warning,
+  passes only an allowlisted environment (no tokens or API keys), skips dependency installation, and can never
+  publish.
+
+Workspaces are fresh clones of the source repository's committed `HEAD`; uncommitted changes are not verified. After
+the clone, every git operation on the workspace runs inside the sandbox, and all comparisons use the recorded base
+commit SHA rather than `HEAD`.
+
+> The Docker path is covered by tests that mock the Docker CLI (flags, phases, fail-closed behaviour, environment).
+> It has not yet been exercised against a real Docker daemon in this repository's development environment.
 
 ## Quick start
 
-Requirements: Python 3.11+, Git.
+Requirements: Python 3.11+, Git, and Docker for the default sandbox.
 
 ```bash
 cd autonomous-pr-fixer
-python -m venv .venv
-# Windows: .venv\Scripts\Activate.ps1    macOS/Linux: source .venv/bin/activate
 python -m pip install -r requirements.txt
 python -m pytest -q
-```
-
-### Run the deterministic demo
-
-```bash
+docker build -t cerberus-sandbox:py3.11 sandbox/
 python main.py --demo
 ```
 
+Without Docker, run the demo on the host (trusted fixture only):
+
+```bash
+python main.py --demo --unsafe-local-sandbox
+```
+
 The demo copies [`examples/rate_calculator`](autonomous-pr-fixer/examples/rate_calculator) into a temporary git
-repository and runs the full pipeline. Its reproduction test and patch are read from files in that directory, so the
-run is offline and repeatable; every gate still executes. No PR is created.
+repository and runs the full pipeline with a reproduction test and patch read from files; every gate executes.
 
 ### Verify your own patch
 
@@ -78,9 +79,6 @@ python main.py --repo /path/to/git/repo \
   --patch path/to/fix.diff
 ```
 
-The repository must be a git repository with at least one commit. The patch must be a unified diff that applies with
-`git apply`.
-
 ### Model-generated tests or patches (optional)
 
 ```bash
@@ -88,7 +86,15 @@ export ANTHROPIC_API_KEY=...        # or OPENAI_API_KEY / GEMINI_API_KEY
 python main.py --repo /path/to/repo --title "..." --body "... at path/to/file.py:12" --use-llm-repro --use-llm
 ```
 
-Model modes are off unless requested. If a model mode is requested without a key, the run is refused.
+Model modes are off unless requested; requested without a key, the run is refused. Model output is held to the same
+gates.
+
+## Publishing
+
+Publishing happens only for an admitted run, in `--mode github` without `--dry-run`, with the Docker sandbox. The
+verified diff is applied to a fresh host-side clone at the verified base commit and pushed; the token is passed to git
+through environment configuration, never through argv, a remote URL, or the sandbox. Pull requests are opened as
+drafts. Diffs touching `.git/`, `.cerberus/` or `.github/workflows/` are refused. Cerberus never merges.
 
 ## GitHub webhook service
 
@@ -97,15 +103,14 @@ cd autonomous-pr-fixer
 uvicorn github.webhook_handler:app --host 127.0.0.1 --port 8000
 ```
 
-The service exposes only `GET /health` and `POST /webhook`. Deliveries must carry a valid `X-Hub-Signature-256`
-for `GITHUB_WEBHOOK_SECRET`; an unset secret rejects everything. Issues labelled `bug`/`auto-fix`, or comments
-containing `@bot-fix`, dispatch the pipeline against the checkout in `CERBERUS_REPO_DIR`. Runs are dry-run unless
-`CERBERUS_WEBHOOK_DRY_RUN=0`. Webhook runs have no reproduction test or patch source unless model modes are
-enabled, so without them they are refused.
+The service exposes only `GET /health` and `POST /webhook`. Deliveries must carry a valid `X-Hub-Signature-256` for
+`GITHUB_WEBHOOK_SECRET`; an unset secret rejects everything. Issues labelled `bug`/`auto-fix`, or comments containing
+`@bot-fix`, dispatch the pipeline against `CERBERUS_REPO_DIR` in GitHub mode (Docker required). Runs are dry-run
+unless `CERBERUS_WEBHOOK_DRY_RUN=0`.
 
 ## Configuration
 
-Environment variables are read directly from the process; a `.env` file is not loaded automatically. See
+Environment variables are read directly from the process; `.env` is not loaded automatically. See
 [`.env.example`](autonomous-pr-fixer/.env.example).
 
 | Variable | Purpose |
@@ -114,43 +119,47 @@ Environment variables are read directly from the process; a `.env` file is not l
 | `GITHUB_WEBHOOK_SECRET` | Required HMAC secret for `/webhook` |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `CERBERUS_MODEL` | Optional model access |
 | `CERBERUS_USE_LLM`, `CERBERUS_USE_LLM_REPRO` | Enable model patching / reproduction |
+| `CERBERUS_SANDBOX`, `CERBERUS_SANDBOX_IMAGE` | `docker` (default) or `host-unsafe`; image name |
 | `CERBERUS_REPO_DIR`, `CERBERUS_WEBHOOK_DRY_RUN` | Webhook dispatch target and publishing switch |
 | `PATCH_MAX_ATTEMPTS`, `PATCH_MAX_LINES_CHANGED` | Patch-loop budget, default 5 attempts / 200 lines |
-| `SANDBOX_TIMEOUT_SECONDS` | Per-command timeout, default 60 |
+| `SANDBOX_TIMEOUT_SECONDS` | Default per-command timeout, 60 |
 | `RUN_ARTIFACTS_DIR` | Where `run.json` files go, default `artifacts` |
 
 ## Evaluation
 
 ```bash
-python evaluation/smoke_runner.py
+python evaluation/smoke_runner.py                         # Docker
+python evaluation/smoke_runner.py --unsafe-local-sandbox  # host, trusted fixtures
 ```
 
-Five synthetic repositories with scripted patches exercise the real gates (a clean fix, a fix found on retry, a
-non-reproducible issue, a regression, and a scope leak). This measures gate behaviour on known cases. It is not a
+Five synthetic repositories with scripted patches exercise the real gates: a clean fix, a fix found on retry, a
+non-reproducible issue, a regression, and a scope leak. This checks gate behaviour on known cases. It is not a
 benchmark of repair ability, and Cerberus has no benchmark results yet.
 
 ## Known limitations
 
-- **Sandbox:** without Docker, commands run on the host as the current user with the host environment. Do not run
-  untrusted repositories this way.
-- **RED gate:** any non-zero pytest exit other than a syntax error counts as reproduction, including import and
-  collection errors.
-- **Regression gate:** compares against "all tests pass", not against a baseline run, so repositories with already
-  failing tests are always refused. Output is parsed from console text.
-- **Scope gate:** newly created (untracked) files are not counted.
-- **Localization:** keyword and AST-symbol matching over Python files; accuracy is not measured.
+- **Python and pytest only.** The regression and RED gates need pytest JUnit output; `tox`/`nox`-only suites are
+  refused as unverifiable.
+- **Dependency detection** covers `pyproject.toml`/`setup.py` (with `test`/`dev` extras), `requirements*.txt`; no
+  Poetry/uv/pipenv lock-file installs, private indexes, or services such as databases.
+- **The RED gate's relevance check is heuristic** (imports and identifiers written as code in the issue). A test can
+  satisfy every rule and still encode the wrong expected behaviour; that needs human review.
+- **Passing gates is not proof of correctness.** Tests only cover what they cover.
+- **Scope policy** is the single localized file; localization is keyword/AST matching and is not measured.
+- **Repository code controls its own test run**, so a deliberately malicious repository could forge JUnit results.
+  The gates verify patches to trusted-but-buggy repositories, not adversarial ones.
 - **Webhook idempotency** is in memory and lost on restart.
-- **Python and pytest only.**
 
 ## Repository layout
 
 ```text
 autonomous-pr-fixer/
 ├── main.py          CLI and pipeline orchestration
-├── agents/          triage, reproduction, localization, patch loop, regression, repo setup, model generators
-├── harness/         sandbox, state machine, admission controller, diff utilities, run artifacts, config
+├── agents/          triage, reproduction (RED/GREEN), localization, patch loop, regression, repo setup, model generators
+├── harness/         sandbox, JUnit parsing, scope gate, admission, state machine, diff utilities, run artifacts, config
 ├── retrieval/       Python AST index and lexical search
 ├── github/          webhook handler and PR publisher
+├── sandbox/         Dockerfile for the sandbox image
 ├── examples/        demo fixture (rate_calculator) and preserved VoteVault scenario
 ├── evaluation/      smoke scenarios and metrics reporter
 └── tests/

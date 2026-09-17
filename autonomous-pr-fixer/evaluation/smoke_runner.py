@@ -1,241 +1,186 @@
 """
 Smoke scenarios for the verification gates.
 
-Five small synthetic repositories, each built in a sandbox, exercise the real
-RED gate, patch loop, regression agent, and admission controller. The patches are
-scripted, not model-generated, so this measures gate behaviour on known cases.
-It is not SWE-bench and says nothing about repair ability on real issues.
+Five small synthetic repositories exercise the real RED gate, baseline, patch
+loop, GREEN check, regression gate, scope gate and admission controller. The
+reproduction tests and patches are scripted, not model-generated, so this
+measures gate behaviour on known cases. It is not SWE-bench and says nothing
+about repair ability on real issues.
+
+Usage:
+    python evaluation/smoke_runner.py                        # Docker sandbox (default)
+    python evaluation/smoke_runner.py --unsafe-local-sandbox # trusted fixtures on the host
 """
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 import time
-from typing import List
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from harness.docker_sandbox import Sandbox
-from harness.admission_controller import AdmissionController
-from agents.reproduction_agent import ReproductionAgent
-from agents.patch_agent import PatchAgent
+from agents.llm_patch_generator import ScriptedPatchGenerator
+from agents.patch_agent import PatchAgent, PatchLoopResult
 from agents.regression_agent import RegressionAgent
+from agents.reproduction_agent import ReproductionAgent
 from evaluation.metrics_reporter import MetricsReporter, RunRecord
+from harness.admission_controller import AdmissionController
+from harness.diff_utils import DiffUtils
+from harness.docker_sandbox import Sandbox, SandboxError
+from harness.scope_gate import analyze_scope
 
 
-def run_smoke_scenarios() -> List[RunRecord]:
-    """Runs the 5-instance smoke test suite.
+@dataclass
+class Scenario:
+    instance_id: str
+    files: Dict[str, str]
+    allowed: List[str]
+    issue_title: str
+    issue_body: str
+    repro_test: str
+    patches: List[str]
 
-    The gate outcomes in these records are measured: each scenario really builds a
-    repo, runs the RED gate, applies a diff, and runs a regression suite in a
-    sandbox. Token counts and localization accuracy are not — no model is in the
-    loop — so those fields stay unset and the reporter labels them accordingly.
-    """
-    records: List[RunRecord] = []
 
-    # 1. Arithmetic bug
+SCENARIOS: List[Scenario] = [
+    Scenario(
+        "SMOKE-001 (arithmetic_bug)",
+        {"calc.py": "def add(a, b):\n    return a - b\n",
+         "tests/test_calc.py": "from calc import add\n\ndef test_add_zero():\n    assert add(0, 0) == 0\n"},
+        ["calc.py"],
+        "add subtracts instead of adding", "add(2, 3) gives -1",
+        "from calc import add\n\ndef test_repro():\n    assert add(2, 3) == 5\n",
+        ["--- a/calc.py\n+++ b/calc.py\n@@ -2 +2 @@\n-    return a - b\n+    return a + b\n"],
+    ),
+    Scenario(
+        "SMOKE-002 (off_by_one_self_heal)",
+        {"slicer.py": "def get_slice(items):\n    return items[:1]\n",
+         "tests/test_slicer.py": "from slicer import get_slice\n\ndef test_slice_empty():\n    assert get_slice([]) == []\n"},
+        ["slicer.py"],
+        "get_slice misses second element", "get_slice([1, 2, 3]) should return the first two items",
+        "from slicer import get_slice\n\ndef test_repro():\n    assert len(get_slice([1, 2, 3])) == 2\n",
+        ["--- a/slicer.py\n+++ b/slicer.py\n@@ -2 +2 @@\n-    return items[:1]\n+    return items[:0]\n",
+         "--- a/slicer.py\n+++ b/slicer.py\n@@ -2 +2 @@\n-    return items[:1]\n+    return items[:2]\n"],
+    ),
+    Scenario(
+        "SMOKE-003 (non_reproducible_issue)",
+        {"valid.py": "def is_positive(x):\n    return x > 0\n",
+         "tests/test_valid.py": "from valid import is_positive\n\ndef test_one():\n    assert is_positive(1)\n"},
+        ["valid.py"],
+        "is_positive is wrong", "is_positive(5) should be True",
+        "from valid import is_positive\n\ndef test_repro():\n    assert is_positive(5) is True\n",
+        [],
+    ),
+    Scenario(
+        "SMOKE-004 (regression_breaker)",
+        {"core.py": "def process(x):\n    if x == 'new':\n        return 'ok_new'\n    return 'legacy_default'\n",
+         "tests/test_core.py": "from core import process\n\ndef test_legacy():\n    assert process('old') == 'legacy_default'\n"},
+        ["core.py"],
+        "process ignores special", "process('special') should return 'special_val'",
+        "from core import process\n\ndef test_repro():\n    assert process('special') == 'special_val'\n",
+        ["--- a/core.py\n+++ b/core.py\n@@ -1,4 +1,4 @@\n def process(x):\n-    if x == 'new':\n-        return 'ok_new'\n-    return 'legacy_default'\n+    if x == 'special':\n+        return 'special_val'\n+    return None\n"],
+    ),
+    Scenario(
+        "SMOKE-005 (scope_leak)",
+        {"auth.py": "def get_user():\n    return 'admin'\n",
+         "vault.py": "SECRET = 'unmodified'\n",
+         "tests/test_auth.py": "from auth import get_user\n\ndef test_basic():\n    assert get_user() != ''\n"},
+        ["auth.py"],
+        "get_user returns the wrong role", "get_user() should return 'authenticated'",
+        "from auth import get_user\n\ndef test_repro():\n    assert get_user() == 'authenticated'\n",
+        ["--- a/auth.py\n+++ b/auth.py\n@@ -1,2 +1,2 @@\n def get_user():\n-    return 'admin'\n+    return 'authenticated'\n"
+         "--- a/vault.py\n+++ b/vault.py\n@@ -1 +1 @@\n-SECRET = 'unmodified'\n+SECRET = 'leaked'\n"],
+    ),
+]
+
+
+def run_scenario(scenario: Scenario, isolation: Optional[str] = None) -> RunRecord:
     started = time.monotonic()
-    with Sandbox() as sb:
-        sb.exec("git init && git config user.name 'Bot' && git config user.email 'b@t.co'")
-        sb.write_file("calc.py", "def add(a, b):\n    return a - b\n")
-        sb.write_file("test_legacy.py", "from calc import add\ndef test_add_zero(): assert add(0, 0) == 0\n")
-        sb.exec("git add -A && git commit -m 'initial'")
+    with Sandbox(isolation=isolation) as sb:
+        for path, content in scenario.files.items():
+            sb.write_file(path, content)
+        sb.exec("git init -q")
+        sb.exec("git config user.name \"Bot\"")
+        sb.exec("git config user.email \"bot@localhost\"")
+        sb.exec("git add -A")
+        sb.exec("git commit -q -m \"initial\"")
+        sb.base_commit = sb.exec("git rev-parse HEAD").stdout.strip()
+        sb.ensure_harness_dir()
 
         repro_agent = ReproductionAgent(sb)
-        repro_res = repro_agent.run_reproduction_gate(
-            "add subtracts instead of adding",
-            "add(2, 3) gives -1",
-            "from calc import add\ndef test_repro(): assert add(2, 3) == 5\n",
+        red = repro_agent.run_reproduction_gate(scenario.issue_title, scenario.issue_body, scenario.repro_test)
+        record = dict(
+            instance_id=scenario.instance_id,
+            reproduced=red.reproduced,
+            top_1_correct=False,
+            top_3_correct=False,
+            target_passed=False,
+            regression_clean=True,
+            blast_radius_clean=True,
+            admitted_for_pr=False,
+            patch_attempts=0,
+            total_tokens=0,  # no model in the loop; see tokens_measured
+            runtime_sec=0.0,
+            patch_size_lines=0,
+            rejection_reason=None,
         )
-        patch_agent = PatchAgent(sb, max_attempts=3)
-        diff_1 = "--- a/calc.py\n+++ b/calc.py\n@@ -2 +2 @@\n-    return a - b\n+    return a + b\n"
-        patch_res = patch_agent.run_patch_loop(["calc.py"], lambda att, fb: diff_1)
+        if not red.reproduced:
+            record.update(rejection_reason=f"{red.refusal_code}: {red.error_message}", runtime_sec=round(time.monotonic() - started, 2))
+            return RunRecord(**record)
 
         regr_agent = RegressionAgent(sb)
-        regr_res = regr_agent.run_regression_suite(["calc.py"], test_suite_cmd=f"{sb.python_cmd} -m pytest test_legacy.py")
-        decision = AdmissionController.evaluate(patch_res, regr_res)
+        test_cmd = f"{sb.python_cmd} -m pytest -q"
+        baseline = regr_agent.record_baseline(test_cmd)
+        if baseline.report is None:
+            record.update(rejection_reason=f"BASELINE_UNVERIFIABLE: {baseline.error}", runtime_sec=round(time.monotonic() - started, 2))
+            return RunRecord(**record)
 
-        records.append(
-            RunRecord(
-                instance_id="SMOKE-001 (arithmetic_bug)",
-                reproduced=repro_res.reproduced,
-                top_1_correct=True,
-                top_3_correct=True,
-                target_passed=patch_res.reached_green,
-                regression_clean=regr_res.all_tests_passed,
-                blast_radius_clean=regr_res.blast_radius.is_acceptable,
-                admitted_for_pr=decision.approved,
-                patch_attempts=patch_res.total_attempts,
-                total_tokens=0,  # no model in the loop; see tokens_measured
-                runtime_sec=round(time.monotonic() - started, 2),
-                patch_size_lines=patch_res.total_lines_changed,
-            )
+        loop = PatchAgent(sb, max_attempts=3).run_patch_loop(
+            scenario.allowed, ScriptedPatchGenerator(scenario.patches), verifier=repro_agent.green_verifier(red),
         )
-
-    # 2. Parsing self-heals
-    started = time.monotonic()
-    with Sandbox() as sb:
-        sb.exec("git init && git config user.name 'Bot' && git config user.email 'b@t.co'")
-        sb.write_file("parser.py", "def get_slice(items):\n    return items[:1]\n")
-        sb.write_file("test_slice_legacy.py", "from parser import get_slice\ndef test_slice_empty(): assert get_slice([]) == []\n")
-        sb.exec("git add -A && git commit -m 'initial'")
-
-        repro_agent = ReproductionAgent(sb)
-        repro_res = repro_agent.run_reproduction_gate(
-            "get_slice misses second element",
-            "Expected items[:2]",
-            "from parser import get_slice\ndef test_repro(): assert len(get_slice([1,2,3])) == 2\n",
+        changes = DiffUtils.workspace_changes(sb)
+        patch_res = PatchLoopResult(
+            reached_green=loop.reached_green, total_attempts=loop.total_attempts,
+            winning_diff=changes.diff_text, history=loop.history, total_lines_changed=changes.total_lines,
         )
-        patch_agent = PatchAgent(sb, max_attempts=3)
-        def self_heal_gen(att: int, fb: str):
-            if att == 1:
-                return "--- a/parser.py\n+++ b/parser.py\n@@ -2 +2 @@\n-    return items[:1]\n+    return items[:0]\n"
-            return "--- a/parser.py\n+++ b/parser.py\n@@ -2 +2 @@\n-    return items[:1]\n+    return items[:2]\n"
-
-        patch_res = patch_agent.run_patch_loop(["parser.py"], self_heal_gen)
-        regr_agent = RegressionAgent(sb)
-        regr_res = regr_agent.run_regression_suite(["parser.py"], test_suite_cmd=f"{sb.python_cmd} -m pytest test_slice_legacy.py")
-        decision = AdmissionController.evaluate(patch_res, regr_res)
-
-        records.append(
-            RunRecord(
-                instance_id="SMOKE-002 (off_by_one_self_heal)",
-                reproduced=repro_res.reproduced,
-                top_1_correct=True,
-                top_3_correct=True,
-                target_passed=patch_res.reached_green,
-                regression_clean=regr_res.all_tests_passed,
-                blast_radius_clean=regr_res.blast_radius.is_acceptable,
-                admitted_for_pr=decision.approved,
-                patch_attempts=patch_res.total_attempts,
-                total_tokens=0,  # no model in the loop; see tokens_measured
-                runtime_sec=round(time.monotonic() - started, 2),
-                patch_size_lines=patch_res.total_lines_changed,
-            )
+        regression = regr_agent.run_regression_suite(test_cmd, baseline.report)
+        scope = analyze_scope(sb, scenario.allowed, changes=changes)
+        decision = AdmissionController.evaluate(patch_res, regression, scope)
+        record.update(
+            target_passed=loop.reached_green,
+            regression_clean=regression.regression_free,
+            blast_radius_clean=scope.is_acceptable,
+            admitted_for_pr=decision.approved,
+            patch_attempts=loop.total_attempts,
+            patch_size_lines=changes.total_lines,
+            rejection_reason=None if decision.approved else f"{decision.rejection_state}: {decision.rejection_summary}",
+            runtime_sec=round(time.monotonic() - started, 2),
         )
-
-    # 3. Non-reproducible
-    started = time.monotonic()
-    with Sandbox() as sb:
-        sb.write_file("valid.py", "def is_positive(x): return x > 0\n")
-        repro_agent = ReproductionAgent(sb)
-        repro_res = repro_agent.run_reproduction_gate(
-            "Fake bug", "Does not fail",
-            "from valid import is_positive\ndef test_repro(): assert is_positive(5) is True\n"
-        )
-        records.append(
-            RunRecord(
-                instance_id="SMOKE-003 (non_reproducible_issue)",
-                reproduced=repro_res.reproduced,
-                top_1_correct=False,
-                top_3_correct=False,
-                target_passed=False,
-                regression_clean=True,
-                blast_radius_clean=True,
-                admitted_for_pr=False,
-                patch_attempts=0,
-                total_tokens=0,  # no model in the loop; see tokens_measured
-                runtime_sec=round(time.monotonic() - started, 2),
-                patch_size_lines=0,
-                rejection_reason="Blocked at RED Gate: Could not reproduce bug.",
-            )
-        )
-
-    # 4. Regression trap
-    started = time.monotonic()
-    with Sandbox() as sb:
-        sb.exec("git init && git config user.name 'Bot' && git config user.email 'b@t.co'")
-        sb.write_file("core.py", "def process(x):\n    if x == 'new': return 'ok_new'\n    return 'legacy_default'\n")
-        sb.write_file("test_suite.py", "from core import process\ndef test_legacy(): assert process('old') == 'legacy_default'\n")
-        sb.exec("git add -A && git commit -m 'initial'")
-
-        repro_agent = ReproductionAgent(sb)
-        repro_res = repro_agent.run_reproduction_gate(
-            "Issue with x == special", "fails on special",
-            "from core import process\ndef test_repro(): assert process('special') == 'special_val'\n"
-        )
-        bad_patch = (
-            "--- a/core.py\n+++ b/core.py\n@@ -2,2 +2,2 @@\n"
-            "-    if x == 'new': return 'ok_new'\n-    return 'legacy_default'\n"
-            "+    if x == 'special': return 'special_val'\n+    return None\n"
-        )
-        patch_agent = PatchAgent(sb, max_attempts=2)
-        patch_res = patch_agent.run_patch_loop(["core.py"], lambda att, fb: bad_patch)
-        regr_agent = RegressionAgent(sb)
-        regr_res = regr_agent.run_regression_suite(["core.py"], test_suite_cmd=f"{sb.python_cmd} -m pytest test_suite.py")
-        decision = AdmissionController.evaluate(patch_res, regr_res)
-
-        records.append(
-            RunRecord(
-                instance_id="SMOKE-004 (regression_breaker)",
-                reproduced=repro_res.reproduced,
-                top_1_correct=True,
-                top_3_correct=True,
-                target_passed=patch_res.reached_green,
-                regression_clean=regr_res.all_tests_passed,
-                blast_radius_clean=regr_res.blast_radius.is_acceptable,
-                admitted_for_pr=decision.approved,
-                patch_attempts=patch_res.total_attempts,
-                total_tokens=0,  # no model in the loop; see tokens_measured
-                runtime_sec=round(time.monotonic() - started, 2),
-                patch_size_lines=patch_res.total_lines_changed,
-                rejection_reason=decision.rejection_summary,
-            )
-        )
-
-    # 5. Blast-radius leak
-    started = time.monotonic()
-    with Sandbox() as sb:
-        sb.exec("git init && git config user.name 'Bot' && git config user.email 'b@t.co'")
-        sb.write_file("auth.py", "def get_user(): return 'admin'\n")
-        sb.write_file("vault.py", "SECRET = 'unmodified'\n")
-        sb.write_file("test_auth_legacy.py", "from auth import get_user\ndef test_basic(): assert get_user() != ''\n")
-        sb.exec("git add -A && git commit -m 'initial'")
-
-        repro_agent = ReproductionAgent(sb)
-        repro_res = repro_agent.run_reproduction_gate(
-            "auth bug", "get_user",
-            "from auth import get_user\ndef test_repro(): assert get_user() == 'authenticated'\n"
-        )
-        leak_diff = (
-            "--- a/auth.py\n+++ b/auth.py\n@@ -1 +1 @@\n-def get_user(): return 'admin'\n+def get_user(): return 'authenticated'\n"
-            "--- a/vault.py\n+++ b/vault.py\n@@ -1 +1 @@\n-SECRET = 'unmodified'\n+SECRET = 'leaked'\n"
-        )
-        patch_agent = PatchAgent(sb, max_attempts=1)
-        patch_res = patch_agent.run_patch_loop(["auth.py"], lambda att, fb: leak_diff)
-        regr_agent = RegressionAgent(sb)
-        regr_res = regr_agent.run_regression_suite(["auth.py"], test_suite_cmd=f"{sb.python_cmd} -m pytest test_auth_legacy.py")
-        decision = AdmissionController.evaluate(patch_res, regr_res)
-
-        records.append(
-            RunRecord(
-                instance_id="SMOKE-005 (blast_radius_leak)",
-                reproduced=repro_res.reproduced,
-                top_1_correct=True,
-                top_3_correct=True,
-                target_passed=patch_res.reached_green,
-                regression_clean=regr_res.all_tests_passed,
-                blast_radius_clean=regr_res.blast_radius.is_acceptable,
-                admitted_for_pr=decision.approved,
-                patch_attempts=patch_res.total_attempts,
-                total_tokens=0,  # no model in the loop; see tokens_measured
-                runtime_sec=round(time.monotonic() - started, 2),
-                patch_size_lines=patch_res.total_lines_changed,
-                rejection_reason=decision.rejection_summary,
-            )
-        )
-
-    return records
+        return RunRecord(**record)
 
 
-def run_benchmark() -> MetricsReporter:
-    records = run_smoke_scenarios()
-    title = "Gate smoke scenarios (5 synthetic repos, scripted patches, measured sandbox runs)"
+def run_smoke_scenarios(isolation: Optional[str] = None) -> List[RunRecord]:
+    return [run_scenario(s, isolation) for s in SCENARIOS]
 
+
+def run_benchmark(isolation: Optional[str] = None) -> MetricsReporter:
+    records = run_smoke_scenarios(isolation)
     reporter = MetricsReporter(records)
-    print(reporter.format_markdown_table(title=title))
+    print(reporter.format_markdown_table(title="Gate smoke scenarios (5 synthetic repos, scripted patches, measured sandbox runs)"))
+    for r in records:
+        outcome = "ADMITTED" if r.admitted_for_pr else f"REFUSED ({r.rejection_reason})"
+        print(f"- {r.instance_id}: {outcome}")
     return reporter
 
 
 if __name__ == "__main__":
-    run_benchmark()
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--unsafe-local-sandbox", action="store_true", help="Run fixtures on the host (trusted fixtures only).")
+    args = parser.parse_args()
+    try:
+        run_benchmark("host-unsafe" if args.unsafe_local_sandbox else None)
+    except SandboxError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        sys.exit(2)

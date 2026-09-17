@@ -14,7 +14,8 @@ from harness.diff_utils import DiffUtils
 from harness.admission_controller import AdmissionController
 from harness.run_artifact import write_run_artifact
 from agents.patch_agent import PatchLoopResult
-from agents.regression_agent import RegressionReport, StructuralBlastRadius
+from agents.regression_agent import RegressionReport
+from harness.scope_gate import ScopeReport
 
 
 def test_diff_utils_compute_diff_stats():
@@ -52,7 +53,7 @@ def test_run_artifact_records_extended_diff_fields():
             "admit_pr": True,
             "target_test_passed": True,
             "regression_passed": True,
-            "blast_radius_acceptable": True,
+            "scope_acceptable": True,
             "patch_changed": True,
             "diff_stat": "+2/-0",
             "diff_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -87,7 +88,7 @@ def test_run_artifact_records_extended_diff_fields():
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        assert data["schema_version"] == "1.2"
+        assert data["schema_version"] == "1.3"
         assert data["final_state"] == "ADMITTED"
         assert data["execution_mode"] == "local"
         assert data["patch_changed"] is True
@@ -101,39 +102,12 @@ def test_run_artifact_records_extended_diff_fields():
 
 
 def test_stale_workspace_prevention():
-    """
-    If a workspace claims GREEN but produced 0 modified files in git,
-    Gate 4 MUST reject the patch as REJECTED_EMPTY_PATCH.
-    """
-    patch_res = PatchLoopResult(
-        reached_green=True,
-        total_attempts=2,
-        winning_diff="",  # No actual diff applied
-        history=[],
-        total_lines_changed=0,
-        final_changed_files=[],
-    )
-    blast = StructuralBlastRadius(
-        expected_files=["calc.py"],
-        observed_files=[],
-        unauthorized_files=[],
-        lines_added=0,
-        lines_deleted=0,
-        is_acceptable=True,
-    )
-    regr = RegressionReport(
-        all_tests_passed=True,
-        total_tests=5,
-        passed_count=5,
-        failed_count=0,
-        skipped_count=0,
-        error_count=0,
-        execution_time_sec=0.4,
-        raw_output="5 passed",
-        blast_radius=blast,
-    )
+    """A run that claims GREEN but changed nothing against the base is refused as EMPTY_PATCH."""
+    patch_res = PatchLoopResult(reached_green=True, total_attempts=2, winning_diff="", history=[])
+    regr = RegressionReport(results_parsed=True, total_tests=5, passed_count=5, baseline_total=5)
+    scope = ScopeReport(allowed_files=["calc.py"], changed_files=[], is_acceptable=True, diff_text="")
 
-    decision = AdmissionController.evaluate(patch_res, regr)
+    decision = AdmissionController.evaluate(patch_res, regr, scope)
     assert decision.approved is False
     assert decision.gate_4_patch_changed is False
-    assert decision.rejection_state == "REJECTED_EMPTY_PATCH"
+    assert decision.rejection_state == "EMPTY_PATCH"

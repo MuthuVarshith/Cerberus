@@ -37,7 +37,6 @@ class HarnessConfig:
 
     # Sandbox
     sandbox_timeout_seconds: int = 60
-    sandbox_network_disabled: bool = True
 
     # Observability
     log_level: str = "INFO"
@@ -84,10 +83,6 @@ def load_config(require_github: bool = False, require_llm: bool = False) -> Harn
     def _int(key: str, default: int) -> int:
         return _env_int(key, default)
 
-    def _bool(key: str, default: bool) -> bool:
-        raw = os.environ.get(key, str(default)).lower()
-        return raw in ("1", "true", "yes")
-
     cfg = HarnessConfig(
         github_token=os.environ.get("GITHUB_TOKEN") or None,
         github_webhook_secret=os.environ.get("GITHUB_WEBHOOK_SECRET") or None,
@@ -96,7 +91,6 @@ def load_config(require_github: bool = False, require_llm: bool = False) -> Harn
         patch_max_attempts=_int("PATCH_MAX_ATTEMPTS", 5),
         patch_max_lines_changed=_int("PATCH_MAX_LINES_CHANGED", 200),
         sandbox_timeout_seconds=_int("SANDBOX_TIMEOUT_SECONDS", 60),
-        sandbox_network_disabled=_bool("SANDBOX_NETWORK_DISABLED", True),
         log_level=os.environ.get("LOG_LEVEL", "INFO").upper(),
         run_artifacts_dir=os.environ.get("RUN_ARTIFACTS_DIR", "artifacts"),
     )

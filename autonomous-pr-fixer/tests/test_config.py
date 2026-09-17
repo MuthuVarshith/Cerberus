@@ -53,9 +53,3 @@ def test_int_env_var_parsing(monkeypatch):
     cfg = load_config()
     assert cfg.patch_max_attempts == 10
     assert cfg.sandbox_timeout_seconds == 120
-
-
-def test_bool_env_var_parsing(monkeypatch):
-    monkeypatch.setenv("SANDBOX_NETWORK_DISABLED", "false")
-    cfg = load_config()
-    assert cfg.sandbox_network_disabled is False

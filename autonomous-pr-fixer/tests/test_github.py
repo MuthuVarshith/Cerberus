@@ -13,11 +13,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from github.webhook_handler import app
 from github.pr_publisher import PRPublisher, redact_secrets, sanitize_ref
-from harness.docker_sandbox import Sandbox
 from harness.admission_controller import AdmissionController
 from agents.reproduction_agent import ReproductionResult
 from agents.patch_agent import PatchLoopResult
-from agents.regression_agent import RegressionReport, StructuralBlastRadius
+from agents.regression_agent import RegressionReport
+from harness.scope_gate import ScopeReport
 
 SECRET = "integration-webhook-secret"
 
@@ -90,78 +90,55 @@ def test_webhook_triggers_on_bot_fix_comment():
     assert "invocation" in data["trigger"]
 
 
+def _evidence_inputs():
+    repro = ReproductionResult(
+        reproduced=True,
+        test_code="def test_bug(): assert 1 == 2",
+        error_message="",
+        returncode=1,
+        raw_output="AssertionError: 1 != 2",
+        failing_test_ids=[".cerberus.test_reproduce::test_bug"],
+        failure_types={".cerberus.test_reproduce::test_bug": "AssertionError"},
+        runs=3,
+    )
+    diff = "--- a/mod.py\n+++ b/mod.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n"
+    patch =PatchLoopResult(reached_green=True, total_attempts=2, winning_diff=diff, history=[])
+    regr = RegressionReport(results_parsed=True, total_tests=10, passed_count=10, baseline_total=10, execution_time_sec=1.2)
+    scope = ScopeReport(allowed_files=["mod.py"], changed_files=["mod.py"], lines_added=1, lines_deleted=1,
+                        changed_symbols=["mod.py::<module>"], is_acceptable=True, diff_text=diff)
+    decision = AdmissionController.evaluate(patch, regr, scope)
+    return repro, patch, regr, scope, decision
+
+
 def test_pr_publisher_evidence_report_formatting():
-    with Sandbox() as sb:
-        publisher = PRPublisher(sb)
+    publisher = PRPublisher()
+    repro, patch, regr, scope, decision = _evidence_inputs()
+    body = publisher.build_evidence_report(101, "Wrong calculation in mod.py", repro, patch, regr, scope, decision, "fix/issue-101", base_commit="a" * 40)
+    pr_info = publisher.publish_pr(
+        issue_number=101,
+        issue_title="Wrong calculation in mod.py",
+        repo_slug="my-org/my-repo",
+        branch_name="fix/issue-101",
+        pr_body=body,
+        dry_run=True,
+    )
 
-        repro = ReproductionResult(
-            reproduced=True,
-            test_code="def test_bug(): assert 1 == 2",
-            error_message="",
-            returncode=1,
-            raw_output="AssertionError: 1 != 2",
-        )
-        patch = PatchLoopResult(
-            reached_green=True,
-            total_attempts=2,
-            winning_diff="--- a/mod.py\n+++ b/mod.py\n@@ -1 +1 @@\n-1\n+2\n",
-            history=[],
-        )
-        blast = StructuralBlastRadius(expected_files=["mod.py"], observed_files=["mod.py"], unauthorized_files=[], lines_added=1, lines_deleted=1, is_acceptable=True)
-        regr = RegressionReport(all_tests_passed=True, total_tests=10, passed_count=10, failed_count=0, skipped_count=0, error_count=0, execution_time_sec=1.2, raw_output="10 passed", blast_radius=blast)
-        decision = AdmissionController.evaluate(patch, regr)
-
-        pr_info = publisher.publish_pr(
-            issue_number=101,
-            issue_title="Wrong calculation in mod.py",
-            repo_slug="my-org/my-repo",
-            branch_name="fix/issue-101-mod",
-            pr_body=publisher.build_evidence_report(101, "Wrong calculation in mod.py", repro, patch, regr, decision, "fix/issue-101-mod"),
-            dry_run=True,
-        )
-
-        assert pr_info["status"] == "dry_run_success"
-        assert "101" in pr_info["pr_title"]
-        assert "RED Gate" in pr_info["body"]
-        assert "GREEN Gate" in pr_info["body"]
-        assert "APPROVED" in pr_info["body"]
-        assert "--- a/mod.py" in pr_info["body"]
+    assert pr_info["status"] == "dry_run_success"
+    assert pr_info["pr_url"] is None
+    assert "101" in pr_info["pr_title"]
+    for expected in ("RED Gate", "GREEN Gate", "APPROVED", "--- a/mod.py", "3 of 3 runs", "baseline-aware", "a" * 40):
+        assert expected in pr_info["body"]
 
 
 def test_evidence_report_does_not_invent_token_counts():
     """With no model in the loop the report must say so, not print a plausible number."""
-    with Sandbox() as sb:
-        publisher = PRPublisher(sb)
-        repro = ReproductionResult(
-            reproduced=True, test_code="def test_bug(): assert 1 == 2",
-            error_message="", returncode=1, raw_output="AssertionError",
-        )
-        patch = PatchLoopResult(
-            reached_green=True, total_attempts=1,
-            winning_diff="--- a/m.py\n+++ b/m.py\n@@ -1 +1 @@\n-1\n+2\n", history=[],
-        )
-        blast = StructuralBlastRadius(
-            expected_files=["m.py"], observed_files=["m.py"], unauthorized_files=[],
-            lines_added=1, lines_deleted=1, is_acceptable=True,
-        )
-        regr = RegressionReport(
-            all_tests_passed=True, total_tests=1, passed_count=1, failed_count=0,
-            skipped_count=0, error_count=0, execution_time_sec=0.1,
-            raw_output="1 passed", blast_radius=blast,
-        )
-        decision = AdmissionController.evaluate(patch, regr)
-
-        unmeasured = publisher.build_evidence_report(
-            1, "t", repro, patch, regr, decision, "fix/issue-1",
-        )
-        assert "not measured" in unmeasured
-        assert "1570" not in unmeasured
-
-        measured = publisher.build_evidence_report(
-            1, "t", repro, patch, regr, decision, "fix/issue-1",
-            token_usage={"total_tokens": 4242},
-        )
-        assert "4242 tokens" in measured
+    publisher = PRPublisher()
+    repro, patch, regr, scope, decision = _evidence_inputs()
+    unmeasured = publisher.build_evidence_report(1, "t", repro, patch, regr, scope, decision, "fix/issue-1")
+    assert "not measured" in unmeasured
+    measured = publisher.build_evidence_report(1, "t", repro, patch, regr, scope, decision, "fix/issue-1",
+                                               token_usage={"total_tokens": 4242})
+    assert "4242 tokens" in measured
 
 
 def test_redact_secrets_strips_tokens_and_url_credentials():
@@ -201,36 +178,69 @@ def test_sanitize_ref_removes_shell_metacharacters():
     assert sanitize_ref("$(:;)") != ""
 
 
-def test_push_failure_error_is_redacted(monkeypatch):
+class _Completed:
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _live_publish(publisher, tmp_path, diff="--- a/m.py\n+++ b/m.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n"):
+    return publisher.publish_pr(
+        issue_number=5, issue_title="t", repo_slug="o/r", branch_name="fix/issue-5", pr_body="body",
+        dry_run=False, diff_text=diff, source_repo_dir=str(tmp_path), base_commit="b" * 40,
+    )
+
+
+def test_push_failure_error_is_redacted(tmp_path):
     """A failed live push must not return the token in its error string."""
     token = "ghp_" + "c" * 36
-    with Sandbox() as sb:
-        publisher = PRPublisher(sb, github_token=token)
+    seen = []
 
-        class _Res:
-            def __init__(self, exit_code=0, stdout="", stderr=""):
-                self.exit_code = exit_code
-                self.stdout = stdout
-                self.stderr = stderr
+    def _git(args, cwd, env):
+        seen.append((list(args), env))
+        if args[0] == "push":
+            return _Completed(128, stderr=f"fatal: could not read from 'https://x-access-token:{token}@github.com/o/r.git'")
+        return _Completed()
 
-        def _fake_exec(cmd, timeout=None):
-            if cmd.startswith("git push"):
-                return _Res(
-                    exit_code=128,
-                    stderr=f"fatal: could not read from 'https://x-access-token:{token}@github.com/o/r.git'",
-                )
-            return _Res()
+    info = _live_publish(PRPublisher(github_token=token, git_runner=_git), tmp_path)
+    assert info["status"] == "error"
+    assert token not in info["error"]
+    assert "***REDACTED***" in info["error"]
 
-        monkeypatch.setattr(sb, "exec", _fake_exec)
-        info = publisher.publish_pr(
-            issue_number=5,
-            issue_title="t",
-            repo_slug="o/r",
-            branch_name="fix/issue-5",
-            pr_body="body",
-            dry_run=False,
-        )
 
-        assert info["status"] == "error"
-        assert token not in info["error"]
-        assert "***REDACTED***" in info["error"]
+def test_token_never_appears_in_git_arguments(tmp_path):
+    """The token travels in environment configuration, never argv or a remote URL."""
+    token = "ghp_" + "d" * 36
+    calls = []
+
+    def _git(args, cwd, env):
+        calls.append((list(args), env or {}))
+        return _Completed(128 if args[0] == "push" else 0, stderr="stop before API call")
+
+    _live_publish(PRPublisher(github_token=token, git_runner=_git), tmp_path)
+    assert any(a[0] == "push" for a, _ in calls)
+    for args, env in calls:
+        assert all(token not in part for part in args)
+        if args[0] != "push":
+            assert "GIT_CONFIG_COUNT" not in env
+    push_env = next(env for args, env in calls if args[0] == "push")
+    assert push_env["GIT_CONFIG_KEY_0"] == "http.https://github.com/.extraheader"
+    assert token not in push_env["GIT_CONFIG_VALUE_0"]  # base64-encoded, never raw
+
+
+@pytest.mark.parametrize(
+    "diff,fragment",
+    [
+        ("--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -1 +1 @@\n-a\n+b\n", "workflow"),
+        ("--- a/.git/config\n+++ b/.git/config\n@@ -1 +1 @@\n-a\n+b\n", "forbidden paths"),
+        ("", "no verified diff"),
+    ],
+)
+def test_publisher_refuses_unsafe_or_missing_diffs(tmp_path, diff, fragment):
+    def _git(args, cwd, env):
+        raise AssertionError("git must not run for a refused publish")
+
+    info = _live_publish(PRPublisher(github_token="ghp_" + "e" * 36, git_runner=_git), tmp_path, diff=diff)
+    assert info["status"] == "error"
+    assert fragment in info["error"]

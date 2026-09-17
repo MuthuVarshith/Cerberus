@@ -53,9 +53,9 @@ def _no_ambient_keys(monkeypatch):
 @pytest.fixture
 def sandbox_with_code():
     with Sandbox() as sb:
-        sb.exec("git init && git config user.name 'Bot' && git config user.email 'b@t.co'")
+        sb.exec("git init && git config user.name \"Bot\" && git config user.email \"b@t.co\"")
         sb.write_file("calc.py", "def add(a, b):\n    return a - b\n")
-        sb.exec("git add -A && git commit -m 'initial'")
+        sb.exec("git add -A && git commit -m \"initial\"")
         yield sb
 
 
@@ -179,4 +179,4 @@ def test_synthesize_and_verify_rejects_passing_test(sandbox_with_code):
 
     result = synth.synthesize_and_verify(max_attempts=2)
     assert result.reproduced is False
-    assert "RED GATE BLOCKED" in result.error_message
+    assert result.refusal_code == "RED_NOT_FAILING"

@@ -56,23 +56,23 @@ def test_approved_run_publishes_with_a_real_evidence_body(recorded_publishes, tm
     assert len(recorded_publishes) == 1
     body = recorded_publishes[0]["pr_body"]
     assert "RED Gate" in body
-    assert "Applied Unified Diff" in body
+    assert "Applied diff" in body
     assert "APPROVED" in body
     assert "if total == 0" in body
 
 
 def test_rejected_run_never_reaches_publish(recorded_publishes, monkeypatch, tmp_path):
     """A rejected decision must produce no push and no PR attempt at all."""
-    def _rejected(patch_res, regr_res):
+    def _rejected(patch_res, regr_res, scope_res):
         return AdmissionDecision(
             approved=False,
             reasons=["forced rejection for test"],
             rejection_summary="forced rejection for test",
             gate_1_target_passed=True,
             gate_2_regression_passed=True,
-            gate_3_blast_radius_passed=True,
+            gate_3_scope_passed=True,
             gate_4_patch_changed=False,
-            rejection_state="REJECTED_EMPTY_PATCH",
+            rejection_state="EMPTY_PATCH",
         )
 
     monkeypatch.setattr(main.AdmissionController, "evaluate", staticmethod(_rejected))

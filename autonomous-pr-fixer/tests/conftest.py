@@ -27,3 +27,14 @@ def _no_ambient_llm_config(monkeypatch):
         "GITHUB_TOKEN",
     ):
         monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _explicit_test_sandbox(monkeypatch):
+    """Tests run repository fixtures written by the tests themselves.
+
+    Docker is the default and fails closed when unavailable; the suite opts in
+    to host-unsafe execution explicitly so it can run on machines without
+    Docker. Tests of the Docker path set CERBERUS_SANDBOX themselves.
+    """
+    monkeypatch.setenv("CERBERUS_SANDBOX", "host-unsafe")

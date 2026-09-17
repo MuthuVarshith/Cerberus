@@ -42,6 +42,7 @@ def write_run_artifact(
     reproduction_test_code: str = "",
     reproduction_output: str = "",
     diff_text: str = "",
+    sections: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Write a run.json artifact for this repair attempt.
@@ -53,7 +54,7 @@ def write_run_artifact(
 
     artifact: Dict[str, Any] = {
         # Identification
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "run_id": run_id,
         "issue": {"number": issue_number, "title": issue_title},
         "execution_mode": execution_mode,
@@ -99,6 +100,11 @@ def write_run_artifact(
             "diff": diff_text,
         },
     }
+
+    # Gate-level evidence (RED runs, baseline comparison, scope, sandbox, refusal).
+    for key, value in (sections or {}).items():
+        if key not in artifact:
+            artifact[key] = value
 
     path = os.path.join(run_dir, "run.json")
     with open(path, "w", encoding="utf-8") as f:

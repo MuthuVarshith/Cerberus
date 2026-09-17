@@ -19,8 +19,8 @@ def test_patch_loop_self_heals_to_green():
     with Sandbox() as sb:
         # Initialize git repo in sandbox workspace for clean git apply / rollback
         sb.exec("git init")
-        sb.exec("git config user.name 'HarnessBot'")
-        sb.exec("git config user.email 'bot@test.org'")
+        sb.exec("git config user.name \"HarnessBot\"")
+        sb.exec("git config user.email \"bot@test.org\"")
 
         # Write buggy code
         sb.write_file(
@@ -30,11 +30,12 @@ def test_patch_loop_self_heals_to_green():
             "    return 0\n"
         )
         # Commit initial state
-        sb.exec("git add math_ops.py && git commit -m 'Initial commit'")
+        sb.exec("git add math_ops.py && git commit -m \"Initial commit\"")
 
         # Write failing reproduction test
+        sb.ensure_harness_dir()
         sb.write_file(
-            "test_reproduce.py",
+            ".cerberus/test_reproduce.py",
             "from math_ops import divide\n"
             "def test_divide():\n"
             "    assert divide(10, 2) == 5\n"
@@ -81,10 +82,11 @@ def test_patch_loop_self_heals_to_green():
 def test_patch_loop_aborts_on_duplicate_diff():
     """Agent producing the exact same diff repeatedly aborts early instead of thrashing."""
     with Sandbox() as sb:
-        sb.exec("git init && git config user.name 'Bot' && git config user.email 'b@t.co'")
+        sb.exec("git init && git config user.name \"Bot\" && git config user.email \"b@t.co\"")
         sb.write_file("calc.py", "def f(): return 0\n")
-        sb.exec("git add calc.py && git commit -m 'init'")
-        sb.write_file("test_reproduce.py", "from calc import f\ndef test_f(): assert f() == 100\n")
+        sb.exec("git add calc.py && git commit -m \"init\"")
+        sb.ensure_harness_dir()
+        sb.write_file(".cerberus/test_reproduce.py", "from calc import f\ndef test_f(): assert f() == 100\n")
 
         agent = PatchAgent(sb, max_attempts=5)
 
