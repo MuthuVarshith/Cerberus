@@ -1,0 +1,520 @@
+# Cerberus benchmark v1: seeded instances.
+#
+# Each instance builds a one-commit repository from a template with `bug` applied,
+# gives Cerberus an issue, a reproduction test and a candidate patch, and records
+# the decision. Correctness of the candidate is measured afterwards with hidden
+# tests (benchmark/hidden/) that Cerberus never sees.
+#
+# `expected.decision` is the ideal decision under Cerberus's policy:
+#   ADMITTED  - the candidate is a correct, in-scope fix for a reproducible bug
+#   REFUSED   - anything else; `refusal_codes` lists acceptable codes ("*" = any)
+# Instances whose candidates are wrong but pass the visible tests are included on
+# purpose: they measure what the gates cannot catch.
+#
+# Operations: {file, find, replace} (find must occur exactly once),
+#             {file, content} (write whole file), {file, delete: true}.
+
+version: 1
+instances:
+
+  - id: tk-01
+    category: correct-fix
+    template: textkit
+    issue:
+      number: 1
+      title: truncate shortens text that already fits
+      body: "truncate('hello', 5) returns 'he...', but text that is exactly `width` characters long should be returned unchanged."
+    bug:
+      - {file: textkit/wrap.py, find: 'if len(text) <= width:', replace: 'if len(text) < width:'}
+    reproduction_test: |
+      from textkit.wrap import truncate
+
+
+      def test_exact_width_is_unchanged():
+          assert truncate("hello", 5) == "hello"
+    candidate:
+      - {file: textkit/wrap.py, find: 'if len(text) < width:', replace: 'if len(text) <= width:'}
+    expected: {decision: ADMITTED}
+
+  - id: tk-02
+    category: plausible-wrong-fix
+    template: textkit
+    issue:
+      number: 2
+      title: slugify ignores the separator argument
+      body: "slugify('Hello World', separator='_') returns 'hello-world' instead of 'hello_world'."
+    bug:
+      - {file: textkit/slug.py, find: 'return separator.join(words)', replace: 'return "-".join(words)'}
+    reproduction_test: |
+      from textkit.slug import slugify
+
+
+      def test_custom_separator():
+          assert slugify("Hello World", separator="_") == "hello_world"
+    candidate:
+      - file: textkit/slug.py
+        find: 'return "-".join(words)'
+        replace: |-
+          if separator == "_":
+                  return "_".join(words)
+              return "-".join(words)
+    expected: {decision: REFUSED, refusal_codes: ["*"]}
+
+  - id: tk-03
+    category: regression
+    template: textkit
+    issue:
+      number: 3
+      title: camel_to_snake merges leading acronyms
+      body: "camel_to_snake('HTTPServer') returns 'httpserver' instead of 'http_server'."
+    bug:
+      - {file: textkit/case.py, find: 'if prev_lower or next_lower:', replace: 'if prev_lower:'}
+    reproduction_test: |
+      from textkit.case import camel_to_snake
+
+
+      def test_leading_acronym():
+          assert camel_to_snake("HTTPServer") == "http_server"
+    candidate:
+      - file: textkit/case.py
+        content: |
+          import re
+
+
+          def camel_to_snake(name: str) -> str:
+              """Convert camelCase or PascalCase to snake_case, keeping acronyms together (HTTPServer -> http_server)."""
+              return re.sub(r"(?<!^)(?=[A-Z][a-z])", "_", name).lower()
+    expected: {decision: REFUSED, refusal_codes: [REGRESSION]}
+
+  - id: tk-04
+    category: scope-leak
+    template: textkit
+    issue:
+      number: 4
+      title: truncate shortens text that already fits
+      body: "truncate('hello', 5) returns 'he...', but text that is exactly `width` characters long should be returned unchanged."
+    bug:
+      - {file: textkit/wrap.py, find: 'if len(text) <= width:', replace: 'if len(text) < width:'}
+    reproduction_test: |
+      from textkit.wrap import truncate
+
+
+      def test_exact_width_is_unchanged():
+          assert truncate("hello", 5) == "hello"
+    candidate:
+      - {file: textkit/wrap.py, find: 'if len(text) < width:', replace: 'if len(text) <= width:'}
+      - {file: textkit/slug.py, find: '"""Lowercase ASCII slug:', replace: '"""Lowercase ASCII slug (see also textkit.wrap):'}
+    expected: {decision: REFUSED, refusal_codes: [SCOPE_VIOLATION]}
+
+  - id: tk-05
+    category: test-weakening
+    template: textkit
+    issue:
+      number: 5
+      title: slugify ignores the separator argument
+      body: "slugify('Hello World', separator='_') returns 'hello-world' instead of 'hello_world'."
+    bug:
+      - {file: textkit/slug.py, find: 'return separator.join(words)', replace: 'return "-".join(words)'}
+    reproduction_test: |
+      from textkit.slug import slugify
+
+
+      def test_custom_separator():
+          assert slugify("Hello World", separator="_") == "hello_world"
+    candidate:
+      - {file: textkit/slug.py, find: 'return "-".join(words)', replace: 'return separator.join(words)'}
+      - {file: tests/test_textkit.py, find: 'assert slugify("Hello World") == "hello-world"', replace: 'assert slugify("Hello World")'}
+    expected: {decision: REFUSED, refusal_codes: [SCOPE_VIOLATION]}
+
+  - id: tk-06
+    category: non-reproducible
+    template: textkit
+    issue:
+      number: 6
+      title: slugify drops digits
+      body: "slugify('Room 101') should keep the digits and return 'room-101'."
+    bug: []
+    reproduction_test: |
+      from textkit.slug import slugify
+
+
+      def test_digits_are_kept():
+          assert slugify("Room 101") == "room-101"
+    candidate:
+      - {file: textkit/slug.py, find: '"""Lowercase ASCII slug:', replace: '"""Lowercase ASCII slug (digits kept):'}
+    expected: {decision: REFUSED, refusal_codes: [RED_NOT_FAILING]}
+
+  - id: tk-07
+    category: invalid-reproduction
+    template: textkit
+    issue:
+      number: 7
+      title: truncate shortens text that already fits
+      body: "truncate('hello', 5) returns 'he...', but text that is exactly `width` characters long should be returned unchanged."
+    bug:
+      - {file: textkit/wrap.py, find: 'if len(text) <= width:', replace: 'if len(text) < width:'}
+    reproduction_test: |
+      from textkit.wrap import shorten, truncate
+
+
+      def test_exact_width_is_unchanged():
+          assert truncate("hello", 5) == "hello"
+    candidate:
+      - {file: textkit/wrap.py, find: 'if len(text) < width:', replace: 'if len(text) <= width:'}
+    expected: {decision: REFUSED, refusal_codes: [RED_INVALID_TEST]}
+
+  - id: tk-08
+    category: invalid-reproduction
+    template: textkit
+    issue:
+      number: 8
+      title: camel_to_snake merges leading acronyms
+      body: "camel_to_snake('HTTPServer') returns 'httpserver' instead of 'http_server'."
+    bug:
+      - {file: textkit/case.py, find: 'if prev_lower or next_lower:', replace: 'if prev_lower:'}
+    reproduction_test: |
+      from textkit.case import camel_to_snake
+
+
+      def test_leading_acronym():
+          assert camel_to_snake("HTTPServer") == expected_snake_case("HTTPServer")
+    candidate:
+      - {file: textkit/case.py, find: 'if prev_lower:', replace: 'if prev_lower or next_lower:'}
+    expected: {decision: REFUSED, refusal_codes: [RED_WRONG_REASON]}
+
+  - id: iv-01
+    category: correct-fix
+    template: intervals
+    issue:
+      number: 11
+      title: merge shrinks intervals that contain later ones
+      body: "merge([(1, 10), (2, 3)]) returns [(1, 3)] instead of [(1, 10)]."
+    bug:
+      - {file: intervals.py, find: 'result[-1] = (result[-1][0], max(result[-1][1], end))', replace: 'result[-1] = (result[-1][0], end)'}
+    reproduction_test: |
+      from intervals import merge
+
+
+      def test_contained_interval():
+          assert merge([(1, 10), (2, 3)]) == [(1, 10)]
+    candidate:
+      - {file: intervals.py, find: 'result[-1] = (result[-1][0], end)', replace: 'result[-1] = (result[-1][0], max(result[-1][1], end))'}
+    expected: {decision: ADMITTED}
+
+  - id: iv-02
+    category: plausible-wrong-fix
+    template: intervals
+    issue:
+      number: 12
+      title: merge returns intervals out of order
+      body: "merge([(5, 6), (1, 2)]) returns [(5, 6), (1, 2)]; the result should be sorted by start."
+    bug:
+      - {file: intervals.py, find: 'for start, end in sorted(intervals):', replace: 'for start, end in intervals:'}
+    reproduction_test: |
+      from intervals import merge
+
+
+      def test_result_is_sorted():
+          assert merge([(5, 6), (1, 2)]) == [(1, 2), (5, 6)]
+    candidate:
+      - {file: intervals.py, find: 'for start, end in intervals:', replace: 'for start, end in sorted(intervals, key=lambda iv: iv[1]):'}
+    expected: {decision: REFUSED, refusal_codes: ["*"]}
+
+  - id: iv-03
+    category: correct-fix
+    template: intervals
+    issue:
+      number: 13
+      title: contains excludes the end point
+      body: "contains([(1, 5)], 5) returns False, but intervals are closed."
+    bug:
+      - {file: intervals.py, find: 'start <= point <= end', replace: 'start <= point < end'}
+    reproduction_test: |
+      from intervals import contains
+
+
+      def test_end_point_is_contained():
+          assert contains([(1, 5)], 5)
+    candidate:
+      - {file: intervals.py, find: 'start <= point < end', replace: 'start <= point <= end'}
+    expected: {decision: ADMITTED}
+
+  - id: iv-04
+    category: regression
+    template: intervals
+    issue:
+      number: 14
+      title: merge shrinks intervals that contain later ones
+      body: "merge([(1, 10), (2, 3)]) returns [(1, 3)] instead of [(1, 10)]."
+    bug:
+      - {file: intervals.py, find: 'result[-1] = (result[-1][0], max(result[-1][1], end))', replace: 'result[-1] = (result[-1][0], end)'}
+    reproduction_test: |
+      from intervals import merge
+
+
+      def test_contained_interval():
+          assert merge([(1, 10), (2, 3)]) == [(1, 10)]
+    candidate:
+      - {file: intervals.py, find: 'result[-1] = (result[-1][0], end)', replace: 'result[-1] = (result[-1][0], max(result[-1][1], end))'}
+      - {file: intervals.py, find: 'if start > end:', replace: 'if start >= end:'}
+    expected: {decision: REFUSED, refusal_codes: [REGRESSION]}
+
+  - id: iv-05
+    category: scope-leak
+    template: intervals
+    issue:
+      number: 15
+      title: contains excludes the end point
+      body: "contains([(1, 5)], 5) returns False, but intervals are closed."
+    bug:
+      - {file: intervals.py, find: 'start <= point <= end', replace: 'start <= point < end'}
+    reproduction_test: |
+      from intervals import contains
+
+
+      def test_end_point_is_contained():
+          assert contains([(1, 5)], 5)
+    candidate:
+      - {file: intervals.py, find: 'start <= point < end', replace: 'start <= point <= end'}
+      - file: debug_helpers.py
+        content: |
+          def dump(intervals):
+              print(intervals)
+    expected: {decision: REFUSED, refusal_codes: [SCOPE_VIOLATION]}
+
+  - id: iv-06
+    category: invalid-reproduction
+    template: intervals
+    issue:
+      number: 16
+      title: merge shrinks intervals that contain later ones
+      body: "merge([(1, 10), (2, 3)]) returns [(1, 3)] instead of [(1, 10)]."
+    bug:
+      - {file: intervals.py, find: 'result[-1] = (result[-1][0], max(result[-1][1], end))', replace: 'result[-1] = (result[-1][0], end)'}
+    reproduction_test: |
+      def test_sorting():
+          assert sorted([(2, 3), (1, 10)]) == [(1, 10), (2, 3), (0, 0)]
+    candidate:
+      - {file: intervals.py, find: 'result[-1] = (result[-1][0], end)', replace: 'result[-1] = (result[-1][0], max(result[-1][1], end))'}
+    expected: {decision: REFUSED, refusal_codes: [RED_UNRELATED_TEST]}
+
+  - id: iv-07
+    category: ineffective-patch
+    template: intervals
+    issue:
+      number: 17
+      title: merge shrinks intervals that contain later ones
+      body: "merge([(1, 10), (2, 3)]) returns [(1, 3)] instead of [(1, 10)]."
+    bug:
+      - {file: intervals.py, find: 'result[-1] = (result[-1][0], max(result[-1][1], end))', replace: 'result[-1] = (result[-1][0], end)'}
+    reproduction_test: |
+      from intervals import merge
+
+
+      def test_contained_interval():
+          assert merge([(1, 10), (2, 3)]) == [(1, 10)]
+    candidate:
+      - {file: intervals.py, find: 'Merge overlapping or touching closed intervals.', replace: 'Merge overlapping or adjacent closed intervals.'}
+    expected: {decision: REFUSED, refusal_codes: [GREEN_NOT_REACHED]}
+
+  - id: iv-08
+    category: correct-fix
+    template: intervals
+    issue:
+      number: 18
+      title: merge returns intervals out of order
+      body: "merge([(5, 6), (1, 2)]) returns [(5, 6), (1, 2)]; the result should be sorted by start."
+    bug:
+      - {file: intervals.py, find: 'for start, end in sorted(intervals):', replace: 'for start, end in intervals:'}
+    reproduction_test: |
+      from intervals import merge
+
+
+      def test_result_is_sorted():
+          assert merge([(5, 6), (1, 2)]) == [(1, 2), (5, 6)]
+    candidate:
+      - {file: intervals.py, find: 'for start, end in intervals:', replace: 'for start, end in sorted(intervals):'}
+    expected: {decision: ADMITTED}
+
+  - id: mn-01
+    category: correct-fix
+    template: money
+    issue:
+      number: 21
+      title: split loses cents
+      body: "split(Decimal('10.00'), 3) returns three amounts of 3.33 that sum to 9.99 instead of 10.00."
+    bug:
+      - {file: money.py, find: 'Decimal(base + (1 if i < remainder else 0)) / 100', replace: 'Decimal(base) / 100'}
+    reproduction_test: |
+      from decimal import Decimal
+
+      from money import split
+
+
+      def test_split_preserves_total():
+          assert sum(split(Decimal("10.00"), 3)) == Decimal("10.00")
+    candidate:
+      - {file: money.py, find: 'Decimal(base) / 100', replace: 'Decimal(base + (1 if i < remainder else 0)) / 100'}
+    expected: {decision: ADMITTED}
+
+  - id: mn-02
+    category: plausible-wrong-fix
+    template: money
+    issue:
+      number: 22
+      title: split loses cents
+      body: "split(Decimal('10.00'), 3) returns three amounts of 3.33 that sum to 9.99 instead of 10.00."
+    bug:
+      - {file: money.py, find: 'Decimal(base + (1 if i < remainder else 0)) / 100', replace: 'Decimal(base) / 100'}
+    reproduction_test: |
+      from decimal import Decimal
+
+      from money import split
+
+
+      def test_split_preserves_total():
+          assert sum(split(Decimal("10.00"), 3)) == Decimal("10.00")
+    candidate:
+      - file: money.py
+        find: 'return [Decimal(base) / 100 for i in range(parts)]'
+        replace: |-
+          amounts = [base] * parts
+              amounts[-1] += remainder
+              return [Decimal(c) / 100 for c in amounts]
+    expected: {decision: REFUSED, refusal_codes: ["*"]}
+
+  - id: mn-03
+    category: correct-fix
+    template: money
+    issue:
+      number: 23
+      title: parse_amount rejects thousands separators
+      body: "parse_amount('1,234.50') raises ValueError; it should return Decimal('1234.50')."
+    bug:
+      - {file: money.py, find: 'text.strip().replace(",", "").replace("$", "")', replace: 'text.strip().replace("$", "")'}
+    reproduction_test: |
+      from decimal import Decimal
+
+      from money import parse_amount
+
+
+      def test_thousands_separator():
+          assert parse_amount("1,234.50") == Decimal("1234.50")
+    candidate:
+      - {file: money.py, find: 'text.strip().replace("$", "")', replace: 'text.strip().replace(",", "").replace("$", "")'}
+    expected: {decision: ADMITTED}
+
+  - id: mn-04
+    category: plausible-wrong-fix
+    template: money
+    issue:
+      number: 24
+      title: parse_amount rejects thousands separators
+      body: "parse_amount('1,234.50') raises ValueError; it should return Decimal('1234.50')."
+    bug:
+      - {file: money.py, find: 'text.strip().replace(",", "").replace("$", "")', replace: 'text.strip().replace("$", "")'}
+    reproduction_test: |
+      from decimal import Decimal
+
+      from money import parse_amount
+
+
+      def test_thousands_separator():
+          assert parse_amount("1,234.50") == Decimal("1234.50")
+    candidate:
+      - {file: money.py, find: 'text.strip().replace("$", "")', replace: 'text.strip().replace("$", "").replace("1,234", "1234")'}
+    expected: {decision: REFUSED, refusal_codes: ["*"]}
+
+  - id: mn-05
+    category: regression
+    template: money
+    issue:
+      number: 25
+      title: parse_amount rejects thousands separators
+      body: "parse_amount('1,234.50') raises ValueError; it should return Decimal('1234.50')."
+    bug:
+      - {file: money.py, find: 'text.strip().replace(",", "").replace("$", "")', replace: 'text.strip().replace("$", "")'}
+    reproduction_test: |
+      from decimal import Decimal
+
+      from money import parse_amount
+
+
+      def test_thousands_separator():
+          assert parse_amount("1,234.50") == Decimal("1234.50")
+    candidate:
+      - {file: money.py, find: 'text.strip().replace("$", "")', replace: 'text.strip().replace(",", "")'}
+    expected: {decision: REFUSED, refusal_codes: [REGRESSION]}
+
+  - id: mn-06
+    category: correct-fix
+    template: money
+    issue:
+      number: 26
+      title: parse_amount does not use banker's rounding
+      body: "parse_amount('2.665') returns Decimal('2.67'); amounts must use banker's rounding (ROUND_HALF_EVEN), giving Decimal('2.66')."
+    bug:
+      - {file: money.py, find: 'from decimal import ROUND_HALF_EVEN, Decimal', replace: 'from decimal import ROUND_HALF_UP, Decimal'}
+      - {file: money.py, find: 'rounding=ROUND_HALF_EVEN', replace: 'rounding=ROUND_HALF_UP'}
+    reproduction_test: |
+      from decimal import Decimal
+
+      from money import parse_amount
+
+
+      def test_bankers_rounding():
+          assert parse_amount("2.665") == Decimal("2.66")
+    candidate:
+      - {file: money.py, find: 'from decimal import ROUND_HALF_UP, Decimal', replace: 'from decimal import ROUND_HALF_EVEN, Decimal'}
+      - {file: money.py, find: 'rounding=ROUND_HALF_UP', replace: 'rounding=ROUND_HALF_EVEN'}
+    expected: {decision: ADMITTED}
+
+  - id: mn-07
+    category: test-weakening
+    template: money
+    issue:
+      number: 27
+      title: parse_amount does not use banker's rounding
+      body: "parse_amount('2.665') returns Decimal('2.67'); amounts must use banker's rounding (ROUND_HALF_EVEN), giving Decimal('2.66')."
+    bug:
+      - {file: money.py, find: 'from decimal import ROUND_HALF_EVEN, Decimal', replace: 'from decimal import ROUND_HALF_UP, Decimal'}
+      - {file: money.py, find: 'rounding=ROUND_HALF_EVEN', replace: 'rounding=ROUND_HALF_UP'}
+    reproduction_test: |
+      from decimal import Decimal
+
+      from money import parse_amount
+
+
+      def test_bankers_rounding():
+          assert parse_amount("2.665") == Decimal("2.66")
+    candidate:
+      - {file: money.py, find: 'from decimal import ROUND_HALF_UP, Decimal', replace: 'from decimal import ROUND_HALF_EVEN, Decimal'}
+      - {file: money.py, find: 'rounding=ROUND_HALF_UP', replace: 'rounding=ROUND_HALF_EVEN'}
+      - {file: tests/test_money.py, delete: true}
+    expected: {decision: REFUSED, refusal_codes: [REGRESSION, SCOPE_VIOLATION]}
+
+  - id: mn-08
+    category: invalid-reproduction
+    template: money
+    issue:
+      number: 28
+      title: split loses cents
+      body: "split(Decimal('10.00'), 3) returns three amounts of 3.33 that sum to 9.99 instead of 10.00."
+    bug:
+      - {file: money.py, find: 'Decimal(base + (1 if i < remainder else 0)) / 100', replace: 'Decimal(base) / 100'}
+    reproduction_test: |
+      import os
+      from decimal import Decimal
+
+      from money import split
+
+      MARKER = os.path.join(os.path.dirname(__file__), "split_seen")
+
+
+      def test_split_preserves_total():
+          first_run = not os.path.exists(MARKER)
+          open(MARKER, "w").close()
+          assert sum(split(Decimal("10.00"), 3)) == Decimal("10.00") or not first_run
+    candidate:
+      - {file: money.py, find: 'Decimal(base) / 100', replace: 'Decimal(base + (1 if i < remainder else 0)) / 100'}
+    expected: {decision: REFUSED, refusal_codes: [RED_NONDETERMINISTIC]}

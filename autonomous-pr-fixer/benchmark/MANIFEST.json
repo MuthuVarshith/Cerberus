@@ -1,0 +1,19 @@
+{
+  "digest": "836fb2e9e603888a62d1b3fc81defe39a307c212b03d8ce3154f25260606230d",
+  "files": {
+    "hidden/test_hidden_intervals.py": "cecc3891d7ee95e9db8bf0d50d5fd68d135d589dd71225716c60874eba7c7328",
+    "hidden/test_hidden_money.py": "0bcdeddef76678babe0647877fe4a9ce426f66c065a79273d154db61704a2c2f",
+    "hidden/test_hidden_textkit.py": "38396e115a55c4f5b83f556ba43bd9822a21abe856480fde1d12675265c0ca45",
+    "instances/v1.yml": "b058065d0fb8c8d6106b40fe9e54f7191f126f6c1876f43fff7375b965698c8c",
+    "templates/intervals/intervals.py": "4b7bc4da58bb59f18b7ecc660b604a0855259b9ff31a56facc63fe79ade0374e",
+    "templates/intervals/tests/test_intervals.py": "02ec718fceee141cb8e64932081c05732c45fc22d917b0907dac9c09dc87e93b",
+    "templates/money/money.py": "5ab1b38df95b1cf5d96c082166ace54db97824d4a9a6b406911100691a4dbb86",
+    "templates/money/tests/test_money.py": "05cfb848f72c03216e18794dcee334f5d3e971c544be0a052a393203f8c32f58",
+    "templates/textkit/tests/test_textkit.py": "c1c0006311af98550ca5edb9903eb0ff9a8c1636c4f1b36205bbffb878c31256",
+    "templates/textkit/textkit/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "templates/textkit/textkit/case.py": "991dfecd86c88d30d8667cdfe7625b4823e287ef28f3d6ec309cf87cf0202c83",
+    "templates/textkit/textkit/slug.py": "13ee083b479521375b5b2c4e40728a1b3a69c6b852217795a18e8c695333a174",
+    "templates/textkit/textkit/wrap.py": "4db72ede1a931055a1fb1f51018a9b188c6cfc28bf1aedfe2c89ae50b2d22979"
+  },
+  "version": "v1"
+}
