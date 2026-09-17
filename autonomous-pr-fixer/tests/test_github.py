@@ -1,94 +1,18 @@
-﻿"""
-Tests for GitHub Integration & Webhook Handler (Section 19 & 20).
 """
-import hashlib
-import hmac
-import json
+Tests for the PR publisher: evidence reports, secret redaction, and safe publishing.
+"""
 import os
 import sys
 import pytest
-from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from github.webhook_handler import app
 from github.pr_publisher import PRPublisher, redact_secrets, sanitize_ref
 from harness.admission_controller import AdmissionController
 from agents.reproduction_agent import ReproductionResult
 from agents.patch_agent import PatchLoopResult
 from agents.regression_agent import RegressionReport
 from harness.scope_gate import ScopeReport
-
-SECRET = "integration-webhook-secret"
-
-
-@pytest.fixture(autouse=True)
-def _webhook_env(monkeypatch):
-    """Deliveries must be signed, and dispatch must not touch a real checkout.
-
-    TestClient runs FastAPI background tasks for real, so CERBERUS_REPO_DIR is
-    cleared to keep the dispatched pipeline a logged no-op.
-    """
-    monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", SECRET)
-    monkeypatch.delenv("CERBERUS_ALLOW_UNSIGNED_WEBHOOKS", raising=False)
-    monkeypatch.delenv("CERBERUS_REPO_DIR", raising=False)
-    import github.webhook_handler as wh
-    wh._processed_delivery_ids.clear()
-    yield
-    wh._processed_delivery_ids.clear()
-
-
-def _post_signed(client, payload: dict, event: str, delivery: str):
-    """POST a webhook the way GitHub does: signed body, explicit delivery id."""
-    body = json.dumps(payload).encode()
-    sig = "sha256=" + hmac.new(SECRET.encode(), body, hashlib.sha256).hexdigest()
-    return client.post(
-        "/webhook",
-        content=body,
-        headers={
-            "content-type": "application/json",
-            "x-github-event": event,
-            "x-hub-signature-256": sig,
-            "x-github-delivery": delivery,
-        },
-    )
-
-
-def test_webhook_triggers_on_bug_issue():
-    client = TestClient(app)
-    res_health = client.get("/health")
-    assert res_health.status_code == 200
-
-    payload = {
-        "action": "opened",
-        "issue": {
-            "number": 42,
-            "title": "Division by zero in calculate_rate",
-            "labels": [{"name": "bug"}],
-        },
-        "repository": {"full_name": "acme/corp-repo"},
-    }
-    resp = _post_signed(client, payload, "issues", "gh-int-001")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["status"] == "queued"
-    assert data["issue_number"] == 42
-
-
-def test_webhook_triggers_on_bot_fix_comment():
-    client = TestClient(app)
-    payload = {
-        "action": "created",
-        "comment": {"body": "Hey @bot-fix please investigate and patch this bug."},
-        "issue": {"number": 88, "title": "Token parser crash"},
-        "repository": {"full_name": "acme/corp-repo"},
-    }
-    resp = _post_signed(client, payload, "issue_comment", "gh-int-002")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["status"] == "queued"
-    assert "invocation" in data["trigger"]
-
 
 def _evidence_inputs():
     repro = ReproductionResult(
@@ -102,7 +26,7 @@ def _evidence_inputs():
         runs=3,
     )
     diff = "--- a/mod.py\n+++ b/mod.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n"
-    patch =PatchLoopResult(reached_green=True, total_attempts=2, winning_diff=diff, history=[])
+    patch = PatchLoopResult(reached_green=True, total_attempts=2, winning_diff=diff, history=[])
     regr = RegressionReport(results_parsed=True, total_tests=10, passed_count=10, baseline_total=10, execution_time_sec=1.2)
     scope = ScopeReport(allowed_files=["mod.py"], changed_files=["mod.py"], lines_added=1, lines_deleted=1,
                         changed_symbols=["mod.py::<module>"], is_acceptable=True, diff_text=diff)

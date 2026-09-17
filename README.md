@@ -155,17 +155,36 @@ verified diff is applied to a fresh host-side clone at the verified base commit 
 through environment configuration, never through argv, a remote URL, or the sandbox. Pull requests are opened as
 drafts. Diffs touching `.git/`, `.cerberus/` or `.github/workflows/` are refused. Cerberus never merges.
 
-## GitHub webhook service
+## GitHub App
 
 ```bash
 cd autonomous-pr-fixer
 uvicorn github.webhook_handler:app --host 127.0.0.1 --port 8000
 ```
 
-The service exposes only `GET /health` and `POST /webhook`. Deliveries must carry a valid `X-Hub-Signature-256` for
-`GITHUB_WEBHOOK_SECRET`; an unset secret rejects everything. Issues labelled `bug`/`auto-fix`, or comments containing
-`@bot-fix`, dispatch the pipeline against `CERBERUS_REPO_DIR` in GitHub mode (Docker required). Runs are dry-run
-unless `CERBERUS_WEBHOOK_DRY_RUN=0`.
+The service exposes only `GET /health` and `POST /webhook` and runs as a GitHub App (you register the App; Cerberus
+does not). Required App permissions: Checks (read & write), Pull requests (read & write), Issues (read & write),
+Contents (read & write), Metadata (read). Workflows permission is not requested. Subscribe to `pull_request` and
+`issue_comment` events.
+
+| Trigger | Who | What happens |
+| --- | --- | --- |
+| Add the `cerberus` label to a PR | user with write access | verify the PR, report a Check Run |
+| New commits on a labelled PR | anyone who can push to it | re-verify |
+| Comment `/cerberus verify` on a PR | user with write access | verify the PR |
+| Comment `/cerberus repair` on an issue | user with write access | only if the server has a patch source configured; reproduction test from a ```` ```python ```` block; draft PR only if publishing is enabled |
+
+To verify a PR, Cerberus uses the **single new test file the PR adds** as the reproduction test: it must fail on the
+base commit and pass with the PR. A PR that adds zero or several test files is refused with guidance, without running
+anything. Issue text comes from the issue linked with "Fixes #N", otherwise from the PR.
+
+Operational properties: HMAC-verified deliveries (fails closed); deliveries claimed once in a SQLite store (idempotent
+across restarts); every run recorded from queue to terminal state and linked to its `run.json` and Check Run; runs in
+one repository serialized; runs per hour capped; each run is a CLI subprocess with a wall-clock timeout; interrupted
+runs marked `ERROR` on restart; bot events ignored; the App refuses to run without the Docker sandbox; never merges.
+
+> The App is tested against a fake GitHub API (routing, authorization, idempotency, rate limits, timeouts, and an
+> end-to-end PR verification through the real CLI). It has not been installed on a real GitHub repository.
 
 ## Configuration
 
@@ -174,26 +193,45 @@ Environment variables are read directly from the process; `.env` is not loaded a
 
 | Variable | Purpose |
 | --- | --- |
-| `GITHUB_TOKEN`, `GITHUB_REPO_SLUG`, `GITHUB_BASE_BRANCH` | Live PR publishing |
-| `GITHUB_WEBHOOK_SECRET` | Required HMAC secret for `/webhook` |
+| `GITHUB_WEBHOOK_SECRET`, `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` / `_PATH` | GitHub App identity; the secret is required for `/webhook` |
+| `CERBERUS_DATA_DIR`, `CERBERUS_MAX_RUNS_PER_HOUR`, `CERBERUS_RUN_TIMEOUT_SECONDS` | App state location and limits |
+| `CERBERUS_REPAIR_PATCH_SOURCE`, `CERBERUS_PUBLISH_REPAIRS` | `/cerberus repair`: `none`/`llm`/`claude-code`; open draft PRs or report only |
+| `GITHUB_TOKEN`, `GITHUB_REPO_SLUG`, `GITHUB_BASE_BRANCH` | CLI publishing with a token (without the App) |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `CERBERUS_MODEL` | Optional model access |
 | `CERBERUS_USE_LLM`, `CERBERUS_USE_LLM_REPRO` | Enable model patching / reproduction |
 | `CERBERUS_SANDBOX`, `CERBERUS_SANDBOX_IMAGE` | `docker` (default) or `host-unsafe`; image name |
-| `CERBERUS_REPO_DIR`, `CERBERUS_WEBHOOK_DRY_RUN` | Webhook dispatch target and publishing switch |
 | `PATCH_MAX_ATTEMPTS`, `PATCH_MAX_LINES_CHANGED` | Patch-loop budget, default 5 attempts / 200 lines |
 | `SANDBOX_TIMEOUT_SECONDS` | Default per-command timeout, 60 |
 | `RUN_ARTIFACTS_DIR` | Where `run.json` files go, default `artifacts` |
 
 ## Evaluation
 
+The benchmark asks one question: **does the gate refuse patches that should not become PRs, compared with shipping
+whatever passes its own reproduction test?**
+
 ```bash
-python evaluation/smoke_runner.py                         # Docker
-python evaluation/smoke_runner.py --unsafe-local-sandbox  # host, trusted fixtures
+python evaluation/benchmark.py --validate --unsafe-local-sandbox   # authoring integrity; does not run Cerberus
+python evaluation/benchmark.py --unsafe-local-sandbox              # scored run on the frozen set
 ```
 
-Five synthetic repositories with scripted patches exercise the real gates: a clean fix, a fix found on retry, a
-non-reproducible issue, a regression, and a scope leak. This checks gate behaviour on known cases. It is not a
-benchmark of repair ability, and Cerberus has no benchmark results yet.
+- **Instances:** 24 seeded cases over three small libraries (`benchmark/instances/v1.yml`): correct fixes,
+  plausible-but-wrong fixes, regressions, scope leaks, test weakening, non-reproducible issues, invalid reproduction
+  tests, and an ineffective patch.
+- **Ground truth:** hidden specification tests (`benchmark/hidden/`) that Cerberus never sees decide whether a
+  candidate is correct.
+- **Baseline:** measured, not stipulated: on the same instances, admit whenever the candidate applies and the
+  reproduction test passes with it.
+- **Integrity:** `--validate` checks each instance independently of Cerberus (hidden tests pass on the clean template
+  and fail on the seeded bug; reproduction tests fail on the bug and pass on the reference fix). The set is frozen
+  by a SHA-256 manifest; scored runs refuse to start if it changed.
+- **Limits:** the instances are small and were written by the Cerberus developer, and no model or external agent is
+  in the loop. This measures gate decisions on known cases, not repair ability on real repositories. No
+  real-world or human-authored bug set exists yet.
+
+The report of record, with confidence intervals and per-instance outcomes, is
+[`benchmark/reports/v1.md`](autonomous-pr-fixer/benchmark/reports/v1.md).
+
+The older smoke runner (`python evaluation/smoke_runner.py`) still exercises five scripted scenarios.
 
 ## Known limitations
 
@@ -202,15 +240,16 @@ benchmark of repair ability, and Cerberus has no benchmark results yet.
   sandbox image contains only Python, git and pytest.
 - **Dependency detection** covers `pyproject.toml`/`setup.py` (with `test`/`dev` extras), `requirements*.txt`;
   anything else needs `setup:` in `.cerberus.yml`. No private indexes or services such as databases.
-- **Existing-change verification is local:** `--base/--head` take git revisions; fetching a GitHub PR by number and
-  posting a Check Run are not implemented yet.
+- **Not yet exercised against real services:** Docker (mocked CLI only), the GitHub App (fake API only), external
+  coding agents (scripted stand-in only), and real repositories written by other people.
+- **Plausible-but-wrong patches pass the gates** when the visible tests don't cover the mistake; the benchmark measures
+  this rather than hiding it.
 - **The RED gate's relevance check is heuristic** (imports and identifiers written as code in the issue). A test can
   satisfy every rule and still encode the wrong expected behaviour; that needs human review.
 - **Passing gates is not proof of correctness.** Tests only cover what they cover.
 - **Scope policy** is the single localized file; localization is keyword/AST matching and is not measured.
 - **Repository code controls its own test run**, so a deliberately malicious repository could forge JUnit results.
   The gates verify patches to trusted-but-buggy repositories, not adversarial ones.
-- **Webhook idempotency** is in memory and lost on restart.
 
 ## Repository layout
 
@@ -220,10 +259,11 @@ autonomous-pr-fixer/
 ├── agents/          triage, reproduction (RED/GREEN), localization, patch loop, patch sources, regression, repo setup, model generators
 ├── harness/         sandbox, JUnit parsing, scope gate, admission, state machine, diff utilities, .cerberus.yml, run artifacts, config
 ├── retrieval/       Python AST index and lexical search
-├── github/          webhook handler and PR publisher
+├── github/          GitHub App (auth, client, run store, routing, Check Run reports), webhook handler, PR publisher
 ├── sandbox/         Dockerfile for the sandbox image
 ├── examples/        demo fixture (rate_calculator) and preserved VoteVault scenario
-├── evaluation/      smoke scenarios and metrics reporter
+├── benchmark/       frozen instance set, templates, hidden tests, manifest, reports
+├── evaluation/      benchmark runner, smoke scenarios, metrics reporter
 └── tests/
 ```
 

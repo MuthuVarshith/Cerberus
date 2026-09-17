@@ -666,6 +666,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--agent-command", metavar="CMD",
                         help="External agent command; the prompt is sent on stdin, {prompt_file} and {workdir} are substituted")
     parser.add_argument("--agent-timeout", type=int, default=1800, help="Seconds allowed per external agent attempt")
+    parser.add_argument("--run-id", metavar="ID", help="Run identifier (letters, digits, _ and -); names the artifact directory")
     parser.add_argument("--use-llm", action="store_true", default=None,
                         help="Generate patches with a model (needs a provider API key). Also CERBERUS_USE_LLM=1.")
     parser.add_argument("--use-llm-repro", action="store_true", default=None,
@@ -702,6 +703,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if not args.title:
         print("[ERROR] --title is required (or use --demo).")
+        return 2
+    if args.run_id and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", args.run_id):
+        print("[ERROR] --run-id may contain only letters, digits, '_' and '-'.")
         return 2
 
     chosen = [flag for flag, value in (
@@ -744,6 +748,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         sandbox_isolation=isolation,
         base_ref=base_ref,
         verify_change=bool(args.head),
+        run_id=args.run_id,
     )
     return 0 if admitted else 1
 

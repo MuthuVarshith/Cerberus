@@ -30,6 +30,9 @@ dist/
 # Harness run artifacts (regenerated on every run)
 autonomous-pr-fixer/artifacts/
 
+# GitHub App state (SQLite run store, repository clones, artifacts)
+autonomous-pr-fixer/.cerberus-app/
+
 # Sandbox and harness scratch space
 swe_sandbox_*/
 cerberus_demo_*/
