@@ -228,8 +228,19 @@ python evaluation/benchmark.py --unsafe-local-sandbox              # scored run 
   in the loop. This measures gate decisions on known cases, not repair ability on real repositories. No
   real-world or human-authored bug set exists yet.
 
-The report of record, with confidence intervals and per-instance outcomes, is
-[`benchmark/reports/v1.md`](autonomous-pr-fixer/benchmark/reports/v1.md).
+Report of record: [`benchmark/reports/v1.md`](autonomous-pr-fixer/benchmark/reports/v1.md) (commit `271bf37`,
+host-unsafe sandbox, pre-written candidate diffs, 24 instances). Headline numbers from that report:
+
+| | Cerberus | Ungated baseline |
+| --- | --- | --- |
+| Patches admitted | 11 | 20 |
+| Admitted but should have been refused | 4 of 11 (95% CI 15%–65%) | 13 of 20 (95% CI 43%–82%) |
+| Admitted code failing hidden tests | 4 | 7 |
+| Correct fixes admitted | 7 of 7 | 7 of 7 |
+
+All four false admissions are plausible-but-wrong patches that pass every visible test and the reproduction test; the
+gates cannot see those mistakes. With n = 24, the intervals are wide: these numbers show the gates behave as designed
+on known failure modes, not how often they would help on real projects.
 
 The older smoke runner (`python evaluation/smoke_runner.py`) still exercises five scripted scenarios.
 

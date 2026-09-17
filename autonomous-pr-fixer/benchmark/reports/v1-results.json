@@ -1,0 +1,607 @@
+{
+  "provenance": {
+    "date": "2026-09-17T10:10:09+00:00",
+    "cerberus_commit": "271bf377af9322da703da3d7da65a63f8d27194e",
+    "manifest_digest": "836fb2e9e603888a62d1b3fc81defe39a307c212b03d8ce3154f25260606230d",
+    "isolation": "host-unsafe",
+    "python": "3.13.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "subset": null
+  },
+  "summary": {
+    "instances": 24,
+    "expected_admit": 7,
+    "expected_refuse": 17,
+    "cerberus": {
+      "admitted": 11,
+      "admitted_fix_rate": {
+        "k": 7,
+        "n": 7,
+        "rate": 1.0,
+        "wilson_95": [
+          0.646,
+          1.0
+        ]
+      },
+      "false_admission_rate": {
+        "k": 4,
+        "n": 11,
+        "rate": 0.364,
+        "wilson_95": [
+          0.152,
+          0.646
+        ]
+      },
+      "admitted_code_failing_hidden_tests": 4,
+      "false_rejection_rate": {
+        "k": 0,
+        "n": 7,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.354
+        ]
+      },
+      "rejection_accuracy": {
+        "k": 12,
+        "n": 17,
+        "rate": 0.706,
+        "wilson_95": [
+          0.469,
+          0.867
+        ]
+      },
+      "refused_when_should_refuse": {
+        "k": 13,
+        "n": 17,
+        "rate": 0.765,
+        "wilson_95": [
+          0.527,
+          0.904
+        ]
+      },
+      "reproduction_validity": {
+        "k": 19,
+        "n": 19,
+        "rate": 1.0,
+        "wilson_95": [
+          0.832,
+          1.0
+        ]
+      },
+      "refusals_by_code": {
+        "REGRESSION": 3,
+        "SCOPE_VIOLATION": 3,
+        "RED_NOT_FAILING": 1,
+        "RED_INVALID_TEST": 1,
+        "RED_WRONG_REASON": 1,
+        "RED_UNRELATED_TEST": 1,
+        "GREEN_NOT_REACHED": 1,
+        "REGRESSION_UNVERIFIABLE": 1,
+        "RED_NONDETERMINISTIC": 1
+      },
+      "mean_patch_attempts": 1.05,
+      "wall_time_sec": {
+        "median": 9.23,
+        "p90": 10.13
+      },
+      "tokens": "not measured (no model in the loop)"
+    },
+    "ungated_baseline": {
+      "definition": "admit when the candidate applies and the reproduction test passes with it",
+      "admitted": 20,
+      "false_admission_rate": {
+        "k": 13,
+        "n": 20,
+        "rate": 0.65,
+        "wilson_95": [
+          0.433,
+          0.819
+        ]
+      },
+      "admitted_code_failing_hidden_tests": 7,
+      "admitted_fix_rate": {
+        "k": 7,
+        "n": 7,
+        "rate": 1.0,
+        "wilson_95": [
+          0.646,
+          1.0
+        ]
+      }
+    }
+  },
+  "instances": [
+    {
+      "id": "tk-01",
+      "category": "correct-fix",
+      "expected_decision": "ADMITTED",
+      "acceptable_refusal_codes": [],
+      "base_commit": "c57859d690d365bffbb16fa7f06d13bd5cb97cbd",
+      "final_state": "ADMITTED",
+      "admitted": true,
+      "refusal_code": null,
+      "refusal_stage": null,
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 10.03,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "tk-02",
+      "category": "plausible-wrong-fix",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "*"
+      ],
+      "base_commit": "5fafbe69020c9bd1af14e24b6c8ca98a2631b4dd",
+      "final_state": "ADMITTED",
+      "admitted": true,
+      "refusal_code": null,
+      "refusal_stage": null,
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.59,
+      "candidate_applies": true,
+      "hidden_correct": false,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "tk-03",
+      "category": "regression",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "REGRESSION"
+      ],
+      "base_commit": "0f0701297cb10f7702412d410a5de6de70f4e514",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "REGRESSION",
+      "refusal_stage": "REGRESSION",
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 10.13,
+      "candidate_applies": true,
+      "hidden_correct": false,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "tk-04",
+      "category": "scope-leak",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "SCOPE_VIOLATION"
+      ],
+      "base_commit": "44f565098ad1692fa0a29a78967f832407a6f6b2",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "SCOPE_VIOLATION",
+      "refusal_stage": "SCOPE",
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.3,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "tk-05",
+      "category": "test-weakening",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "SCOPE_VIOLATION"
+      ],
+      "base_commit": "560049f6c6ab985696a0392600ab75931711081d",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "SCOPE_VIOLATION",
+      "refusal_stage": "SCOPE",
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.27,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "tk-06",
+      "category": "non-reproducible",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "RED_NOT_FAILING"
+      ],
+      "base_commit": "5c702542db8325a5a3d59f426fbc2a6b17581ba7",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "RED_NOT_FAILING",
+      "refusal_stage": "RED_GATE",
+      "red_passed": false,
+      "reproduction_valid_on_reference": null,
+      "patch_attempts": 0,
+      "wall_time_sec": 1.23,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "tk-07",
+      "category": "invalid-reproduction",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "RED_INVALID_TEST"
+      ],
+      "base_commit": "bcdd3d8e48e6280042db9c9b19094a54fd5feada",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "RED_INVALID_TEST",
+      "refusal_stage": "RED_GATE",
+      "red_passed": false,
+      "reproduction_valid_on_reference": null,
+      "patch_attempts": 0,
+      "wall_time_sec": 1.41,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": false,
+      "tokens": null
+    },
+    {
+      "id": "tk-08",
+      "category": "invalid-reproduction",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "RED_WRONG_REASON"
+      ],
+      "base_commit": "45b6634d883ab154f7ef1222b3a409fa193d3f12",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "RED_WRONG_REASON",
+      "refusal_stage": "RED_GATE",
+      "red_passed": false,
+      "reproduction_valid_on_reference": null,
+      "patch_attempts": 0,
+      "wall_time_sec": 1.4,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": false,
+      "tokens": null
+    },
+    {
+      "id": "iv-01",
+      "category": "correct-fix",
+      "expected_decision": "ADMITTED",
+      "acceptable_refusal_codes": [],
+      "base_commit": "61ab729c1e4019400b19e2586df583bbd98fb563",
+      "final_state": "ADMITTED",
+      "admitted": true,
+      "refusal_code": null,
+      "refusal_stage": null,
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.18,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "iv-02",
+      "category": "plausible-wrong-fix",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "*"
+      ],
+      "base_commit": "e3682452c34e67ef703f6d12d49d4d5c2e4b12a7",
+      "final_state": "ADMITTED",
+      "admitted": true,
+      "refusal_code": null,
+      "refusal_stage": null,
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.15,
+      "candidate_applies": true,
+      "hidden_correct": false,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "iv-03",
+      "category": "correct-fix",
+      "expected_decision": "ADMITTED",
+      "acceptable_refusal_codes": [],
+      "base_commit": "1ff29cd78cc73ceb4eff1776fed44b7474db82dd",
+      "final_state": "ADMITTED",
+      "admitted": true,
+      "refusal_code": null,
+      "refusal_stage": null,
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.21,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "iv-04",
+      "category": "regression",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "REGRESSION"
+      ],
+      "base_commit": "92bc5b1f4487e245f4278ee780da3afa1a68ad72",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "REGRESSION",
+      "refusal_stage": "REGRESSION",
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 10.53,
+      "candidate_applies": true,
+      "hidden_correct": false,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "iv-05",
+      "category": "scope-leak",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "SCOPE_VIOLATION"
+      ],
+      "base_commit": "296f976335d9a801738102ff33adb2c26aa9a455",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "SCOPE_VIOLATION",
+      "refusal_stage": "SCOPE",
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.38,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "iv-06",
+      "category": "invalid-reproduction",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "RED_UNRELATED_TEST"
+      ],
+      "base_commit": "b0baec3a5e0413891e7e3deb8573602e142b2288",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "RED_UNRELATED_TEST",
+      "refusal_stage": "RED_GATE",
+      "red_passed": false,
+      "reproduction_valid_on_reference": null,
+      "patch_attempts": 0,
+      "wall_time_sec": 0.34,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": false,
+      "tokens": null
+    },
+    {
+      "id": "iv-07",
+      "category": "ineffective-patch",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "GREEN_NOT_REACHED"
+      ],
+      "base_commit": "c246d74269894cbb655d1d09035bf35fa0b349b0",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "GREEN_NOT_REACHED",
+      "refusal_stage": "PATCH_LOOP",
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 2,
+      "wall_time_sec": 5.58,
+      "candidate_applies": true,
+      "hidden_correct": false,
+      "ungated_admits": false,
+      "tokens": null
+    },
+    {
+      "id": "iv-08",
+      "category": "correct-fix",
+      "expected_decision": "ADMITTED",
+      "acceptable_refusal_codes": [],
+      "base_commit": "9e7c06483216d7b17e6612528a0f3f2a6908615f",
+      "final_state": "ADMITTED",
+      "admitted": true,
+      "refusal_code": null,
+      "refusal_stage": null,
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.23,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "mn-01",
+      "category": "correct-fix",
+      "expected_decision": "ADMITTED",
+      "acceptable_refusal_codes": [],
+      "base_commit": "e733d998845ed215b2c3aecfdfe30aa05d70b913",
+      "final_state": "ADMITTED",
+      "admitted": true,
+      "refusal_code": null,
+      "refusal_stage": null,
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.5,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "mn-02",
+      "category": "plausible-wrong-fix",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "*"
+      ],
+      "base_commit": "33cd4a6882d52742cd36a9c5ed5ff7969be68962",
+      "final_state": "ADMITTED",
+      "admitted": true,
+      "refusal_code": null,
+      "refusal_stage": null,
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.06,
+      "candidate_applies": true,
+      "hidden_correct": false,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "mn-03",
+      "category": "correct-fix",
+      "expected_decision": "ADMITTED",
+      "acceptable_refusal_codes": [],
+      "base_commit": "dabde439131a501af1a079a51e44392ab75abfa5",
+      "final_state": "ADMITTED",
+      "admitted": true,
+      "refusal_code": null,
+      "refusal_stage": null,
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.22,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "mn-04",
+      "category": "plausible-wrong-fix",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "*"
+      ],
+      "base_commit": "ada9530c1fd08612f07082e6176dd0d7f1cd2e9a",
+      "final_state": "ADMITTED",
+      "admitted": true,
+      "refusal_code": null,
+      "refusal_stage": null,
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.17,
+      "candidate_applies": true,
+      "hidden_correct": false,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "mn-05",
+      "category": "regression",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "REGRESSION"
+      ],
+      "base_commit": "fb0102fd8ce0e323fa59d076e2c452b90969e6f4",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "REGRESSION",
+      "refusal_stage": "REGRESSION",
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 10.33,
+      "candidate_applies": true,
+      "hidden_correct": false,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "mn-06",
+      "category": "correct-fix",
+      "expected_decision": "ADMITTED",
+      "acceptable_refusal_codes": [],
+      "base_commit": "9b6f1ef9b06f12c83d611c7f23193b3a896dc272",
+      "final_state": "ADMITTED",
+      "admitted": true,
+      "refusal_code": null,
+      "refusal_stage": null,
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.42,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "mn-07",
+      "category": "test-weakening",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "REGRESSION",
+        "SCOPE_VIOLATION"
+      ],
+      "base_commit": "1b9dbf7baa76e6fedd24d14d6b53b8ac2f3096b1",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "REGRESSION_UNVERIFIABLE",
+      "refusal_stage": "REGRESSION",
+      "red_passed": true,
+      "reproduction_valid_on_reference": true,
+      "patch_attempts": 1,
+      "wall_time_sec": 9.36,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    },
+    {
+      "id": "mn-08",
+      "category": "invalid-reproduction",
+      "expected_decision": "REFUSED",
+      "acceptable_refusal_codes": [
+        "RED_NONDETERMINISTIC"
+      ],
+      "base_commit": "03db3a83f5183ed57de008a882efe8c6bfc15af3",
+      "final_state": "REFUSED",
+      "admitted": false,
+      "refusal_code": "RED_NONDETERMINISTIC",
+      "refusal_stage": "RED_GATE",
+      "red_passed": false,
+      "reproduction_valid_on_reference": null,
+      "patch_attempts": 0,
+      "wall_time_sec": 2.37,
+      "candidate_applies": true,
+      "hidden_correct": true,
+      "ungated_admits": true,
+      "tokens": null
+    }
+  ]
+}

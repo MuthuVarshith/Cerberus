@@ -200,3 +200,6 @@ selected by the gates; (4) several candidate reproduction tests selected by the 
 | 2026-09-17 | `python main.py --demo --unsafe-local-sandbox` | `ADMITTED`, exit 0 |
 | 2026-09-17 | `python evaluation/smoke_runner.py --unsafe-local-sandbox` | 2 admitted, 3 refused (RED_NOT_FAILING, REGRESSION, SCOPE_VIOLATION) as designed |
 | 2026-09-17 | Phase 2 full suite (`python -m pytest -q`, explicit host-unsafe sandbox, Docker mocked) | 190 passed |
+| 2026-09-17 | Benchmark + Phase 4 full suite (GitHub API faked, host-unsafe sandbox, Docker mocked) | 211 passed |
+| 2026-09-17 | `python evaluation/benchmark.py --validate --unsafe-local-sandbox` | 24 instances, 0 problems (after fixing 2 ambiguous seed edits) |
+| 2026-09-17 | Benchmark v1 report of record at `271bf37` (`benchmark/reports/v1.md`) | Cerberus admitted 11 (4 should have been refused); ungated baseline admitted 20 (13 should have been refused); 7/7 correct fixes admitted by both; rejection accuracy 12/17 |
