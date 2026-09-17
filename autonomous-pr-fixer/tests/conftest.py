@@ -1,0 +1,29 @@
+import os
+import sys
+
+import pytest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+
+@pytest.fixture(autouse=True)
+def _isolated_run_artifacts(tmp_path, monkeypatch):
+    """Keep run.json artifacts out of the repository's artifacts/ directory."""
+    artifacts = tmp_path / "artifacts"
+    monkeypatch.setenv("RUN_ARTIFACTS_DIR", str(artifacts))
+    return artifacts
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_llm_config(monkeypatch):
+    """A developer's shell must not switch tests onto a paid model path."""
+    for key in (
+        "CERBERUS_USE_LLM",
+        "CERBERUS_USE_LLM_REPRO",
+        "CERBERUS_MODEL",
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "GITHUB_TOKEN",
+    ):
+        monkeypatch.delenv(key, raising=False)

@@ -38,9 +38,13 @@ def write_run_artifact(
     pr_created: bool = False,
     pr_url: Optional[str] = None,
     admission_rejection_reason: Optional[str] = None,
+    final_state: Optional[str] = None,
+    reproduction_test_code: str = "",
+    reproduction_output: str = "",
+    diff_text: str = "",
 ) -> str:
     """
-    Write a run.json artifact for this repair attempt conforming to Section 7.
+    Write a run.json artifact for this repair attempt.
 
     Returns the absolute path to the written file.
     """
@@ -49,12 +53,13 @@ def write_run_artifact(
 
     artifact: Dict[str, Any] = {
         # Identification
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "run_id": run_id,
         "issue": {"number": issue_number, "title": issue_title},
         "execution_mode": execution_mode,
 
         # Pipeline trace
+        "final_state": final_state or (pipeline_state_history[-1] if pipeline_state_history else None),
         "pipeline_state_history": pipeline_state_history,
         "admission_decision": admission_decision,
         "admission_rejection_reason": admission_rejection_reason or admission_decision.get("rejection_state", ""),
@@ -86,6 +91,13 @@ def write_run_artifact(
         # Test results
         "regression_results": regression_results or {},
         "blast_radius": blast_radius or {},
+
+        # Evidence: what was actually run and changed
+        "evidence": {
+            "reproduction_test_code": reproduction_test_code,
+            "reproduction_output": reproduction_output,
+            "diff": diff_text,
+        },
     }
 
     path = os.path.join(run_dir, "run.json")

@@ -1,23 +1,24 @@
 # Cerberus — `autonomous-pr-fixer`
 
-This directory contains the implementation. **The canonical documentation lives in the [repository root README](../README.md)** — architecture, the four verification gates, sandbox hardening, evaluation provenance, and known limitations.
+This directory contains the implementation. Documentation lives in the [repository root README](../README.md);
+progress, decisions and known limitations are tracked in [`CERBERUS_PROGRESS.md`](../CERBERUS_PROGRESS.md).
 
 Quick start (Python 3.11+):
 
 ```bash
-python -m venv .venv
-pip install -r requirements.txt
-python -m pytest tests/ -q
+python -m pip install -r requirements.txt
+python -m pytest -q
+python main.py --demo
 ```
 
 | Path | Contents |
 | :--- | :--- |
-| `agents/` | triage, localization, reproduction, patch, regression, LLM patch generator |
-| `harness/` | admission controller, pipeline state machine, sandbox, diff utils, run artifacts, interpreter resolution, config |
-| `github/` | webhook handler, PR publisher |
-| `retrieval/` | AST index + lexical search |
-| `evaluation/` | SWE-bench-style runner, baseline, ablation, metrics reporter |
-| `tests/` | 111 tests |
-| `artifacts/` | `run.json` audit trail, one directory per run |
-
-Before citing any evaluation figure, read [§9 Evaluation](../README.md#9-evaluation) — the gate behaviour is measured; token counts and localization accuracy are not measured at all and are reported as `not measured` rather than filled in. CI for this project lives at the repository root, in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+| `main.py` | CLI and pipeline orchestration |
+| `agents/` | triage, reproduction, localization, patch loop, regression, repo setup, model generators |
+| `harness/` | sandbox, pipeline state machine, admission controller, diff utilities, run artifacts, config |
+| `retrieval/` | Python AST index and lexical search |
+| `github/` | webhook handler and PR publisher |
+| `examples/` | `rate_calculator` demo fixture; preserved VoteVault scenario |
+| `evaluation/` | gate smoke scenarios and metrics reporter |
+| `tests/` | automated tests |
+| `artifacts/` | `run.json` per run (git-ignored) |

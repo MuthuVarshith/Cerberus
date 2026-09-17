@@ -97,3 +97,12 @@ def test_patch_loop_aborts_on_duplicate_diff():
         assert len(result.history) == 2
         assert result.history[1].structured_failure.status == "ABORT_DUPLICATE_DIFF"
 
+
+
+@pytest.mark.parametrize("command", ["", "   "])
+def test_empty_test_command_cannot_count_as_green(command):
+    """A missing test command used to make GREEN pass automatically."""
+    with Sandbox() as sb:
+        agent = PatchAgent(sb, max_attempts=1)
+        with pytest.raises(ValueError, match="non-empty test command"):
+            agent.run_patch_loop(["calc.py"], lambda attempt, fb: "", test_command=command)

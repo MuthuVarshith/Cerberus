@@ -133,19 +133,18 @@ class MetricsReporter:
         loc_3 = f"`{m['top_3_acc']}%`" if m["localization_measured"] else unmeasured
         tokens = f"`{m['avg_tokens']}`" if m["tokens_measured"] else unmeasured
         return f"""### {title}
-| Category | Metric | Measurement | Target / Standard |
-| :--- | :--- | :---: | :---: |
-| **Primary** | **Resolution Rate (PR Approved)** | **`{m['resolution_rate']}%`** | 40% – 75% |
-| **Primary** | **Reproduction Success Rate (RED Gate)** | **`{m['reproduction_rate']}%`** | > 80% |
-| **Primary** | **Regression-Free Rate** | **`{m['regression_free_rate']}%`** | > 85% |
-| **Primary** | **PR Admission Rate** | **`{m['pr_admission_rate']}%`** | Regulated |
-| **Secondary** | **Top-1 Localization Accuracy** | {loc_1} | > 65% |
-| **Secondary** | **Top-3 Localization Accuracy** | {loc_3} | > 85% |
-| **Secondary** | **Average Patch Attempts** | `{m['avg_attempts']}` | < 2.5 |
-| **Secondary** | **Average Tokens per Issue** | {tokens} | Efficient ACI |
-| **Secondary** | **Average Runtime** | `{m['avg_runtime_sec']}s` | Fast turnaround |
-| **Secondary** | **Average Patch Size** | `+{m['avg_patch_size_lines']} lines` | Minimal diffs |
-| **Safety** | **Regression-Induced Rejections** | **`{m['reg_rejections']}`** | Prevented breaks |
-| **Safety** | **Blast-Radius Rejections** | **`{m['blast_rejections']}`** | Blocked sprawl |
-| **Safety** | **Non-Reproducible Issue Rejections** | **`{m['non_repro_rejections']}`** | Zero code churn |
+| Category | Metric | Measurement |
+| :--- | :--- | :---: |
+| **Primary** | **Admission Rate** | **`{m['pr_admission_rate']}%`** |
+| **Primary** | **Reproduction Success Rate (RED Gate)** | **`{m['reproduction_rate']}%`** |
+| **Primary** | **Regression-Free Rate** | **`{m['regression_free_rate']}%`** |
+| **Secondary** | **Top-1 Localization Accuracy** | {loc_1} |
+| **Secondary** | **Top-3 Localization Accuracy** | {loc_3} |
+| **Secondary** | **Average Patch Attempts** | `{m['avg_attempts']}` |
+| **Secondary** | **Average Tokens per Issue** | {tokens} |
+| **Secondary** | **Average Wall-Clock Runtime** | `{m['avg_runtime_sec']}s` |
+| **Secondary** | **Average Patch Size** | `+{m['avg_patch_size_lines']} lines` |
+| **Safety** | **Regression-Induced Rejections** | **`{m['reg_rejections']}`** |
+| **Safety** | **Blast-Radius Rejections** | **`{m['blast_rejections']}`** |
+| **Safety** | **Non-Reproducible Issue Rejections** | **`{m['non_repro_rejections']}`** |
 """

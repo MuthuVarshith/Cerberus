@@ -28,10 +28,12 @@ dist/
 *.egg-info/
 
 # Harness run artifacts (regenerated on every run)
-autonomous-pr-fixer/artifacts/run_*/
+autonomous-pr-fixer/artifacts/
 
-# Sandbox scratch space
+# Sandbox and harness scratch space
 swe_sandbox_*/
+cerberus_demo_*/
+.harness_*
 
 # Editors / OS
 .vscode/

@@ -84,6 +84,10 @@ class PatchAgent:
     ) -> PatchLoopResult:
         if test_command is None:
             test_command = f"{self.sandbox.python_cmd} -m pytest test_reproduce.py"
+        if not test_command.strip():
+            # GREEN is a claim about a test run. Without a command there is no
+            # run, so there is nothing that could make the claim true.
+            raise ValueError("run_patch_loop requires a non-empty test command; GREEN cannot be established without one.")
         history: List[PatchAttemptResult] = []
         seen_diffs: set[str] = set()
         feedback_str = "Initial attempt: please provide a minimal unified diff fixing the bug."
@@ -183,23 +187,13 @@ class PatchAgent:
                 continue
 
             # Run target reproduction test
-            if test_command:
-                test_exec = self.sandbox.exec(test_command, timeout=30)
-                passed = (test_exec.exit_code == 0)
-                stdout = test_exec.stdout
-                stderr = test_exec.stderr
-            else:
-                passed = True
-                stdout = "Static Analysis Mode: GREEN Gate bypassed"
-                stderr = ""
-                class DummyExec:
-                    exit_code = 0
-                    stdout = stdout
-                    stderr = stderr
-                test_exec = DummyExec()
+            test_exec = self.sandbox.exec(test_command, timeout=30)
+            passed = (test_exec.exit_code == 0)
+            stdout = test_exec.stdout
+            stderr = test_exec.stderr
 
             if passed:
-                # Target test PASSED (GREEN) or bypassed
+                # Target test PASSED (GREEN)
                 history.append(
                     PatchAttemptResult(
                         attempt=attempt,

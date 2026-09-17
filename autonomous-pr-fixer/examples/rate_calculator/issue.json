@@ -1,0 +1,5 @@
+{
+  "number": 101,
+  "title": "Divide by zero in rate_calculator",
+  "body": "calculate_rate(10, 0) raises ZeroDivisionError at rate_calculator.py:3. It should return 0.0 when total is 0."
+}

@@ -87,7 +87,8 @@ def test_run_artifact_records_extended_diff_fields():
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        assert data["schema_version"] == "1.1"
+        assert data["schema_version"] == "1.2"
+        assert data["final_state"] == "ADMITTED"
         assert data["execution_mode"] == "local"
         assert data["patch_changed"] is True
         assert data["diff_lines_added"] == 2

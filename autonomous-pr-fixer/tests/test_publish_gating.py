@@ -7,21 +7,12 @@ consults the decision, so it is pinned here rather than left to inspection.
 """
 from __future__ import annotations
 
-import os
-import sys
-
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 import main
+from agents.llm_patch_generator import ScriptedPatchGenerator
+from examples.demo import prepare_rate_calculator_demo
 from harness.admission_controller import AdmissionDecision
-
-ISSUE_KWARGS = dict(
-    issue_number=101,
-    issue_title="Divide by zero in rate_calculator",
-    issue_body="calculate_rate(10, 0) throws ZeroDivisionError",
-)
 
 
 @pytest.fixture
@@ -45,21 +36,29 @@ def recorded_publishes(monkeypatch):
     return calls
 
 
-def test_approved_run_publishes_with_a_real_evidence_body(recorded_publishes, tmp_path):
-    """An admitted patch reaches publish_pr, and the body is the evidence report."""
-    admitted = main.run_pipeline(
-        repo_dir=str(tmp_path), dry_run=True, mode="local", **ISSUE_KWARGS
+def _run(tmp_path):
+    scenario = prepare_rate_calculator_demo(str(tmp_path / "fixture"))
+    return main.run_pipeline(
+        repo_dir=scenario.repo_dir,
+        issue_number=scenario.issue_number,
+        issue_title=scenario.issue_title,
+        issue_body=scenario.issue_body,
+        dry_run=True,
+        mode="local",
+        repro_test_code=scenario.repro_test_code,
+        patch_generator=ScriptedPatchGenerator([scenario.patch_diff]),
     )
 
-    assert admitted is True
+
+def test_approved_run_publishes_with_a_real_evidence_body(recorded_publishes, tmp_path):
+    """An admitted patch reaches publish_pr, and the body is the evidence report."""
+    assert _run(tmp_path) is True
     assert len(recorded_publishes) == 1
     body = recorded_publishes[0]["pr_body"]
-    # Not the empty string the CLI used to pass, which made the evidence report
-    # unreachable from every real run.
-    assert body
     assert "RED Gate" in body
     assert "Applied Unified Diff" in body
     assert "APPROVED" in body
+    assert "if total == 0" in body
 
 
 def test_rejected_run_never_reaches_publish(recorded_publishes, monkeypatch, tmp_path):
@@ -71,16 +70,12 @@ def test_rejected_run_never_reaches_publish(recorded_publishes, monkeypatch, tmp
             rejection_summary="forced rejection for test",
             gate_1_target_passed=True,
             gate_2_regression_passed=True,
-            gate_3_blast_radius_passed=False,
-            gate_4_patch_changed=True,
-            rejection_state="REJECTED_ADMISSION",
+            gate_3_blast_radius_passed=True,
+            gate_4_patch_changed=False,
+            rejection_state="REJECTED_EMPTY_PATCH",
         )
 
     monkeypatch.setattr(main.AdmissionController, "evaluate", staticmethod(_rejected))
 
-    admitted = main.run_pipeline(
-        repo_dir=str(tmp_path), dry_run=True, mode="local", **ISSUE_KWARGS
-    )
-
-    assert admitted is False
+    assert _run(tmp_path) is False
     assert recorded_publishes == []

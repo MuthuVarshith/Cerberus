@@ -363,3 +363,11 @@ def test_dispatch_failure_is_logged_not_raised(monkeypatch, tmp_path, caplog):
 
     assert "repair_pipeline_failed" in caplog.text
     assert "sandbox exploded" in caplog.text
+
+
+def test_service_exposes_only_health_and_webhook():
+    """No route may trigger repository work without a verified webhook signature."""
+    import github.webhook_handler as wh
+    paths = {getattr(r, "path", None) for r in wh.app.routes}
+    app_paths = {p for p in paths if p and not p.startswith(("/docs", "/redoc", "/openapi"))}
+    assert app_paths == {"/health", "/webhook"}
