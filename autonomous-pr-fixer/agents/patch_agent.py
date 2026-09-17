@@ -180,8 +180,11 @@ class PatchAgent:
         return PatchLoopResult(
             reached_green=False,
             # Attempts actually made, which is fewer than the budget when the loop
-            # aborted early (duplicate diff).
-            total_attempts=len(history) or self.max_attempts,
+            # aborted early; the duplicate-diff record itself is not an attempt.
+            total_attempts=sum(
+                1 for h in history
+                if not (h.structured_failure and h.structured_failure.status == "ABORT_DUPLICATE_DIFF")
+            ),
             winning_diff="",
             history=history,
         )

@@ -142,3 +142,14 @@ def read_junit_report(path: str) -> TestReport:
         raise JUnitReportError(f"JUnit report was not written: {path}")
     with open(path, "rb") as f:
         return parse_junit_xml(f.read(MAX_REPORT_BYTES + 1))
+
+
+def read_workspace_junit_report(sandbox, rel_path: str) -> TestReport:
+    """Read a report the sandboxed test run wrote, without following symlinks."""
+    try:
+        data = sandbox.read_bytes(rel_path, MAX_REPORT_BYTES + 1)
+    except FileNotFoundError:
+        raise JUnitReportError(f"JUnit report was not written: {rel_path}") from None
+    except (OSError, RuntimeError) as exc:
+        raise JUnitReportError(f"JUnit report could not be read safely: {exc}") from exc
+    return parse_junit_xml(data)

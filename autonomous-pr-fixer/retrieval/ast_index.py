@@ -80,6 +80,8 @@ class ASTIndexer:
                 if not file.endswith(".py"):
                     continue
                 full_path = os.path.join(root, file)
+                if os.path.islink(full_path):
+                    continue  # never follow a workspace symlink from the host
                 rel_path = os.path.relpath(full_path, self.workspace_dir).replace("\\", "/")
                 self._index_file(full_path, rel_path)
 

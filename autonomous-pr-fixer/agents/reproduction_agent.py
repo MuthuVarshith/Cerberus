@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from harness.docker_sandbox import HARNESS_DIR, Sandbox
-from harness.junit import ERROR, FAILED, PASSED, JUnitReportError, TestReport, read_junit_report
+from harness.junit import ERROR, FAILED, PASSED, JUnitReportError, TestReport, read_workspace_junit_report
 from harness.pipeline_state import RefusalCode
 
 REPRO_TEST_PATH = f"{HARNESS_DIR}/test_reproduce.py"
@@ -99,7 +99,7 @@ def _local_module_file(workspace_dir: str, dotted: str) -> Optional[str]:
 
 def _defined_symbols(path: str) -> Set[str]:
     """Top-level functions/classes and class methods defined in a Python file."""
-    if not path.endswith(".py") or not os.path.isfile(path):
+    if not path.endswith(".py") or os.path.islink(path) or not os.path.isfile(path):
         return set()
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -271,14 +271,13 @@ class ReproductionAgent:
         )
 
     def _run_once(self, report_name: str) -> Tuple[Optional[TestReport], str, int, Optional[str]]:
-        report_path = os.path.join(self.sandbox.workspace_dir, HARNESS_DIR, report_name)
-        if os.path.exists(report_path):
-            os.remove(report_path)
+        report_rel = f"{HARNESS_DIR}/{report_name}"
+        self.sandbox.remove_file(report_rel)
         res = self.sandbox.exec(self._pytest_command(report_name), timeout=self.timeout)
         if res.timed_out:
             return None, res.output, res.exit_code, f"reproduction test timed out after {self.timeout}s"
         try:
-            return read_junit_report(report_path), res.output, res.exit_code, None
+            return read_workspace_junit_report(self.sandbox, report_rel), res.output, res.exit_code, None
         except JUnitReportError as exc:
             return None, res.output, res.exit_code, str(exc)
 

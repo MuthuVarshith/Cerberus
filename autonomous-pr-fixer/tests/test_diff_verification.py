@@ -111,3 +111,41 @@ def test_stale_workspace_prevention():
     assert decision.approved is False
     assert decision.gate_4_patch_changed is False
     assert decision.rejection_state == "EMPTY_PATCH"
+
+
+# A hunk whose last context line is an empty source line: that diff line is a single
+# space. Found on a real upstream commit (boltons ead236e), which Cerberus refused as
+# a corrupt patch because the diff was stripped of all trailing whitespace.
+BLANK_CONTEXT_DIFF = (
+    "--- a/m.py\n"
+    "+++ b/m.py\n"
+    "@@ -1,3 +1,3 @@\n"
+    " def f():\n"
+    "-    return 1\n"
+    "+    return 3\n"
+    " \n"
+)
+
+
+def test_extracting_a_diff_keeps_a_trailing_blank_context_line():
+    assert DiffUtils.extract_diff_from_markdown(BLANK_CONTEXT_DIFF).endswith("+    return 3\n ")
+    fenced = "Here is the fix:\n```diff\n" + BLANK_CONTEXT_DIFF + "```\n"
+    assert DiffUtils.extract_diff_from_markdown(fenced) == BLANK_CONTEXT_DIFF.rstrip("\n")
+
+
+def test_diff_ending_in_a_blank_context_line_applies():
+    import subprocess
+    from harness.docker_sandbox import Sandbox
+
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = os.path.join(tmp, "repo")
+        os.makedirs(repo)
+        with open(os.path.join(repo, "m.py"), "w", encoding="utf-8", newline="\n") as f:
+            f.write("def f():\n    return 1\n\ndef g():\n    return 2\n")
+        for args in (["init", "-q"], ["config", "user.name", "t"], ["config", "user.email", "t@t"],
+                     ["config", "core.autocrlf", "false"], ["add", "-A"], ["commit", "-q", "-m", "c"]):
+            subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+        with Sandbox(base_dir=repo) as sb:
+            result = DiffUtils.apply_diff_to_sandbox(sb, BLANK_CONTEXT_DIFF)
+            assert result.success, result.error
+            assert sb.read_file("m.py") == "def f():\n    return 3\n\ndef g():\n    return 2\n"

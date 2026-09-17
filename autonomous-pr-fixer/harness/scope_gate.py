@@ -10,7 +10,10 @@ Measured against the base commit:
 
 Policy enforced: existing test files may not be modified or deleted (unless the
 repository allows it), every changed file must be inside the allowed scope, and
-the number of files and changed lines must be within limits. Symbols are
+the number of files and changed lines must be within limits. A patch may add
+lines to an existing test file (a new test next to the old ones, as most real
+fixes do); the regression gate then runs that file in its base form, so the
+added lines cannot change how the existing tests judge the patch. Symbols are
 recorded as evidence; they are not part of the policy.
 """
 from __future__ import annotations
@@ -19,7 +22,7 @@ import fnmatch
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from harness.diff_utils import DiffUtils, WorkspaceChanges
 from harness.docker_sandbox import HARNESS_DIR, Sandbox
@@ -93,6 +96,7 @@ class ScopeReport:
     deleted_files: List[str] = field(default_factory=list)
     unauthorized_files: List[str] = field(default_factory=list)
     modified_test_files: List[str] = field(default_factory=list)
+    extended_test_files: List[str] = field(default_factory=list)
     lines_added: int = 0
     lines_deleted: int = 0
     changed_symbols: List[str] = field(default_factory=list)
@@ -113,6 +117,7 @@ class ScopeReport:
             "deleted_files": self.deleted_files,
             "unauthorized_files": self.unauthorized_files,
             "modified_test_files": self.modified_test_files,
+            "extended_test_files": self.extended_test_files,
             "lines_added": self.lines_added,
             "lines_deleted": self.lines_deleted,
             "changed_symbols": self.changed_symbols,
@@ -152,7 +157,7 @@ def changed_symbols(sandbox: Sandbox, changes: WorkspaceChanges) -> Dict[str, Di
 def _zero_context_diff(sandbox: Sandbox) -> str:
     """A -U0 diff against the base, new files included, for exact line ranges."""
     base = getattr(sandbox, "base_commit", None) or "HEAD"
-    untracked = [p for p in sandbox.exec("git ls-files --others --exclude-standard -z").stdout.split("\0") if p]
+    untracked = [p for p in sandbox.exec(f"git ls-files --others --exclude-standard -x /{HARNESS_DIR}/ -z").stdout.split("\0") if p]
     pathspec = f"{HARNESS_DIR}/untracked-u0.pathspec"
     if untracked:
         sandbox.write_file(pathspec, "\0".join(untracked) + "\0")
@@ -178,6 +183,26 @@ def is_test_path(path: str) -> bool:
     )
 
 
+def split_test_changes(changes: WorkspaceChanges) -> Tuple[List[str], List[str]]:
+    """Existing test files the change touched, as (modified, extended).
+
+    Extended: lines were only added. Modified: anything else, which includes a
+    deleted file, any deleted line, a binary or mode-only change, and any change to
+    a conftest.py (it alters how every test beside it runs).
+    """
+    modified: List[str] = []
+    extended: List[str] = []
+    for path in changes.files:
+        if path in changes.new_files or not is_test_path(path):
+            continue
+        added, deleted = changes.per_file_numstat.get(path, (0, 0))
+        if path in changes.deleted_files or path.rsplit("/", 1)[-1] == "conftest.py" or deleted or not added:
+            modified.append(path)
+        else:
+            extended.append(path)
+    return modified, extended
+
+
 def _is_allowed(path: str, allowed_files: Sequence[str], allowed_patterns: Sequence[str]) -> bool:
     return path in allowed_files or any(fnmatch.fnmatchcase(path, pattern) for pattern in allowed_patterns)
 
@@ -195,21 +220,24 @@ def analyze_scope(
 
     A file is in scope when it is one of `allowed_files` or matches a glob in
     `allowed_patterns` (fnmatch semantics: `*` also matches `/`). Independently of
-    scope, modifying or deleting an *existing* test file is refused unless
+    scope, modifying or deleting lines of an *existing* test file is refused unless
     `allow_test_modifications` is set: a patch that edits the tests it is judged
     by can make the regression gate pass without fixing anything. New test files
-    are not affected by that rule.
+    and lines added to existing ones are not affected by that rule (see
+    `split_test_changes`).
     """
     changes = changes or DiffUtils.workspace_changes(sandbox)
     allowed = sorted({f.replace("\\", "/") for f in allowed_files})
     patterns = [p.replace("\\", "/") for p in allowed_patterns]
+    modified_tests, extended_tests = split_test_changes(changes)
     report = ScopeReport(
         allowed_files=allowed + [f"pattern:{p}" for p in patterns],
         changed_files=list(changes.files),
         new_files=list(changes.new_files),
         deleted_files=list(changes.deleted_files),
         unauthorized_files=[f for f in changes.files if not _is_allowed(f, allowed, patterns)],
-        modified_test_files=[f for f in changes.files if f not in changes.new_files and is_test_path(f)],
+        modified_test_files=modified_tests,
+        extended_test_files=extended_tests,
         lines_added=changes.lines_added,
         lines_deleted=changes.lines_deleted,
         diff_text=changes.diff_text,

@@ -98,6 +98,8 @@ def test_patch_loop_aborts_on_duplicate_diff():
         # Must abort after attempt 2 (since attempt 2 is a duplicate of attempt 1), NOT run all 5 attempts
         assert len(result.history) == 2
         assert result.history[1].structured_failure.status == "ABORT_DUPLICATE_DIFF"
+        # The evidence reports one attempt: the repeated diff was never evaluated again.
+        assert result.total_attempts == 1
 
 
 

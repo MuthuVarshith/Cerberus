@@ -69,6 +69,7 @@ def check_run_output(artifact: Dict[str, Any], timed_out: bool = False) -> Tuple
         lines.append(
             f"| Scope | {'pass' if scope.get('is_acceptable') else 'fail'} | files: {_ids(scope.get('changed_files') or [])}; "
             f"new: {_ids(scope.get('new_files') or [])}; modified tests: {_ids(scope.get('modified_test_files') or [])}; "
+            f"extended tests (run at base): {_ids(scope.get('extended_test_files') or [])}; "
             f"+{scope.get('lines_added', 0)}/-{scope.get('lines_deleted', 0)}; symbols: {_ids(scope.get('changed_symbols') or [])} |"
         )
 

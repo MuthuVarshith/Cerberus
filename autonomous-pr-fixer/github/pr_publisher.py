@@ -145,6 +145,7 @@ class PRPublisher:
 
         changed_files = getattr(scope_res, "changed_files", []) or []
         new_files = getattr(scope_res, "new_files", []) or []
+        extended_tests = getattr(scope_res, "extended_test_files", []) or []
         symbols = getattr(scope_res, "changed_symbols", []) or []
 
         body = f"""## Cerberus verification report: issue #{issue_number}
@@ -190,6 +191,7 @@ The reproduction test failed on the base commit in {red_runs} of {red_runs} runs
 ### 4. Scope Gate
 - **Files changed:** `{', '.join(changed_files) if changed_files else 'None'}`
 - **New files:** `{', '.join(new_files) if new_files else 'None'}`
+- **Existing test files with lines added (regression ran their base versions):** `{', '.join(extended_tests) if extended_tests else 'None'}`
 - **Lines:** `+{getattr(scope_res, 'lines_added', 0)} / -{getattr(scope_res, 'lines_deleted', 0)}`
 - **Changed symbols (Python AST):** `{', '.join(symbols) if symbols else 'None identified'}`
 

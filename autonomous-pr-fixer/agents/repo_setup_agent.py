@@ -45,9 +45,8 @@ class RepoSetupAgent:
         if tomllib is None:
             return []
         try:
-            with open(os.path.join(self.sandbox.workspace_dir, "pyproject.toml"), "rb") as f:
-                data = tomllib.load(f)
-        except (OSError, ValueError):
+            data = tomllib.loads(self.sandbox.read_bytes("pyproject.toml", 1024 * 1024).decode("utf-8"))
+        except (OSError, ValueError, RuntimeError):
             return []
         extras = (data.get("project") or {}).get("optional-dependencies") or {}
         return [name for name in _TEST_EXTRAS if name in extras]

@@ -1,0 +1,21 @@
+diff --git a/sqlparse/sql.py b/sqlparse/sql.py
+index 5489f05..786f1b2 100644
+--- a/sqlparse/sql.py
++++ b/sqlparse/sql.py
+@@ -18,9 +18,13 @@ class NameAliasMixin:
+ 
+     def get_real_name(self):
+         """Returns the real name (object name) of this identifier."""
+-        # a.b
+-        dot_idx, _ = self.token_next_by(m=(T.Punctuation, '.'))
+-        return self._get_first_name(dot_idx, real_name=True)
++        # a.b.c -> the object name is the last component, without quoting
++        dot_idx = None
++        for idx, tok in enumerate(self.tokens):
++            if tok.match(T.Punctuation, '.'):
++                dot_idx = idx
++        name = self._get_first_name(dot_idx, real_name=True)
++        return name.strip('[]"`') if name else name
+ 
+     def get_alias(self):
+         """Returns the alias for this identifier or ``None``."""

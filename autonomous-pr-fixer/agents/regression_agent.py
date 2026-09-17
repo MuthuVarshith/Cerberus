@@ -10,6 +10,9 @@ Process:
   5. Suspected regressions are re-checked on the base code (the patch is stashed
      and restored). A test that also fails there is reported as flaky, not as a
      regression.
+  6. Existing test files the patch only added lines to run in their base form:
+     added lines (a skip marker, an early return, a monkeypatch) cannot change
+     how the tests that existed before the patch judge it.
 
 Results come only from JUnit XML. A test command whose results cannot be read
 as JUnit XML produces no evidence, and no evidence is never a pass.
@@ -17,13 +20,12 @@ as JUnit XML produces no evidence, and no evidence is never a pass.
 from __future__ import annotations
 
 import fnmatch
-import os
 import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Sequence, Tuple
 
 from harness.docker_sandbox import HARNESS_DIR, ExecResult, Sandbox
-from harness.junit import ERROR, FAILED, PASSED, JUnitReportError, TestReport, read_junit_report
+from harness.junit import ERROR, FAILED, PASSED, JUnitReportError, TestReport, read_workspace_junit_report
 
 _FAILING = (FAILED, ERROR)
 
@@ -76,6 +78,7 @@ class RegressionReport:
     execution_time_sec: float = 0.0
     raw_output: str = ""
     error_message: str = ""
+    test_files_run_at_base: List[str] = field(default_factory=list)
 
     @property
     def regression_free(self) -> bool:
@@ -101,6 +104,7 @@ class RegressionReport:
             "flaky_tests": self.flaky_tests,
             "execution_time_sec": self.execution_time_sec,
             "error_message": self.error_message,
+            "test_files_run_at_base": self.test_files_run_at_base,
         }
 
 
@@ -130,14 +134,12 @@ class RegressionAgent:
                 f"a {JUNIT_PLACEHOLDER} placeholder, or test.report in .cerberus.yml",
             )
         cmd, report_rel = planned
-        report_path = self.sandbox._safe_resolve(report_rel)
-        if os.path.exists(report_path):
-            os.remove(report_path)
+        self.sandbox.remove_file(report_rel)
         res = self.sandbox.exec(cmd, timeout=self.timeout)
         if res.timed_out:
             return TestRun(None, res, f"test suite timed out after {self.timeout}s")
         try:
-            report = _without_excluded(read_junit_report(report_path), self.exclude)
+            report = _without_excluded(read_workspace_junit_report(self.sandbox, report_rel), self.exclude)
         except JUnitReportError as exc:
             return TestRun(None, res, str(exc))
         if report.total == 0:
@@ -166,7 +168,7 @@ class RegressionAgent:
 
     def _recheck_on_base(self, test_command: str) -> Optional[TestReport]:
         """Run the suite with the patch stashed, then restore it. None if that is not possible."""
-        stash = self.sandbox.exec("git stash push --include-untracked -q -m cerberus-recheck")
+        stash = self.sandbox.exec(f"git stash push --include-untracked -q -m cerberus-recheck -- \":(exclude){HARNESS_DIR}\"")
         if stash.exit_code != 0:
             return None
         try:
@@ -177,7 +179,29 @@ class RegressionAgent:
                 raise RuntimeError(f"Could not restore the candidate patch after the baseline re-check: {pop.output}")
         return run.report
 
-    def run_regression_suite(self, test_command: str, baseline: TestReport) -> RegressionReport:
+    def run_regression_suite(
+        self, test_command: str, baseline: TestReport, base_test_files: Sequence[str] = ()
+    ) -> RegressionReport:
+        """Run the suite with the patch applied, `base_test_files` checked out at the base commit."""
+        paths = sorted(set(base_test_files))
+        saved = {path: self.sandbox.read_bytes(path) for path in paths}
+        if paths:
+            pathspec = f"{HARNESS_DIR}/base-test-files.pathspec"
+            self.sandbox.write_file(pathspec, "\0".join(paths) + "\0")
+            base = getattr(self.sandbox, "base_commit", None) or "HEAD"
+            checkout = self.sandbox.exec(f"git checkout {base} --pathspec-from-file={pathspec} --pathspec-file-nul")
+            if checkout.exit_code != 0:
+                raise RuntimeError(f"Could not check out base versions of extended test files: {checkout.output}")
+        try:
+            report = self._run_and_compare(test_command, baseline)
+        finally:
+            # Restore the patch's versions byte for byte; the working tree is what was verified.
+            for path, data in saved.items():
+                self.sandbox.write_bytes(path, data)
+        report.test_files_run_at_base = paths
+        return report
+
+    def _run_and_compare(self, test_command: str, baseline: TestReport) -> RegressionReport:
         start = time.time()
         run = self.run_suite(test_command, "regression.xml")
         if run.report is None:

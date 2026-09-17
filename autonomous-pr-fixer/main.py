@@ -32,7 +32,7 @@ from harness.config import load_config
 from harness.logger import log_event
 from harness.repo_config import RepoConfig, RepoConfigError, load_repo_config
 from harness.run_artifact import write_run_artifact
-from harness.scope_gate import ScopeReport, analyze_scope
+from harness.scope_gate import ScopeReport, analyze_scope, split_test_changes
 from agents.triage_agent import TriageAgent
 from agents.reproduction_agent import ReproductionAgent, ReproductionResult
 from agents.localization_agent import LocalizationAgent
@@ -181,6 +181,16 @@ class _RunRecorder:
                     else None
                 ),
                 "baseline": self.baseline_info or None,
+                "patch_history": [
+                    {
+                        "attempt": h.attempt,
+                        "applied": h.applied_successfully,
+                        "reproduction_test_passed": h.reproduction_test_passed,
+                        "status": h.structured_failure.status if h.structured_failure else "GREEN",
+                        "detail": (h.structured_failure.traceback or "")[-1000:] if h.structured_failure else "",
+                    }
+                    for h in (self.patch_res.history if self.patch_res else [])
+                ],
                 "repo_config": self.repo_config.to_dict() if self.repo_config else None,
                 "patch_source": self.patch_source or None,
             },
@@ -486,9 +496,12 @@ def _run_in_sandbox(
         is_empty_diff=changes.is_empty,
     )
     if not loop_res.reached_green:
+        failures = [h.structured_failure for h in loop_res.history
+                    if h.structured_failure and h.structured_failure.status != "ABORT_DUPLICATE_DIFF"]
+        last = f" Last attempt: {failures[-1].status}: {failures[-1].traceback.strip()[-300:]}" if failures else ""
         return rec.refuse(
             RefusalCode.GREEN_NOT_REACHED, "PATCH_LOOP",
-            f"No candidate patch made the reproduction test pass after {loop_res.total_attempts} attempt(s).",
+            f"No candidate patch made the reproduction test pass after {loop_res.total_attempts} attempt(s).{last}",
         )
     green = repro_agent.verify_green(rec.repro_res, runs=budgets.green_runs)
     if not green.passed:
@@ -500,7 +513,11 @@ def _run_in_sandbox(
     # REGRESSION
     print("\n[7/9] REGRESSION")
     sm.transition(PipelineState.REGRESSION_PENDING)
-    rec.regr_res = regr_agent.run_regression_suite(test_command, baseline.report)
+    # Existing test files the patch only extended run in their base form (see scope_gate).
+    base_test_files = [] if repo_cfg.scope.allow_test_modifications else split_test_changes(changes)[1]
+    if base_test_files:
+        print(f"  -> running existing test files extended by the patch in their base form: {', '.join(base_test_files)}")
+    rec.regr_res = regr_agent.run_regression_suite(test_command, baseline.report, base_test_files=base_test_files)
     r = rec.regr_res
     if not r.results_parsed:
         return rec.refuse(RefusalCode.REGRESSION_UNVERIFIABLE, "REGRESSION", f"Test results after the patch are unusable: {r.error_message}")

@@ -54,6 +54,8 @@ class LexicalSearch:
                 if not file.endswith(file_extension):
                     continue
                 full_path = os.path.join(root, file)
+                if os.path.islink(full_path):
+                    continue  # never follow a workspace symlink from the host
                 rel_path = os.path.relpath(full_path, self.workspace_dir).replace("\\", "/")
 
                 try:

@@ -45,7 +45,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from agents.patch_sources import DiffPatchSource, tree_diff
 from harness.diff_utils import DiffUtils
 from harness.docker_sandbox import HARNESS_DIR, ISOLATION_HOST_UNSAFE, Sandbox, SandboxError, host_unsafe_environment
-from harness.junit import PASSED, JUnitReportError, TestReport, read_junit_report
+from harness.junit import PASSED, JUnitReportError, TestReport, read_workspace_junit_report
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BENCHMARK_DIR = os.path.join(ROOT, "benchmark")
@@ -231,7 +231,7 @@ def run_tests_with(
         report_rel = f"{HARNESS_DIR}/eval.xml"
         sb.exec(f"{sb.python_cmd} -m pytest {' '.join(paths)} -p no:cacheprovider -q --junitxml={report_rel}", timeout=timeout)
         try:
-            return True, read_junit_report(os.path.join(sb.workspace_dir, report_rel))
+            return True, read_workspace_junit_report(sb, report_rel)
         except JUnitReportError:
             return True, None
 

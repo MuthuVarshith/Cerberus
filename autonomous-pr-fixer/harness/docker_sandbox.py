@@ -20,6 +20,14 @@ Isolation modes:
 
 Workspaces are fresh clones of the source repository's HEAD commit, so
 uncommitted changes in the source are never part of what is verified.
+
+The host never follows a symlink inside the workspace. Repository content and
+code running in the container can create symlinks there, and on Linux and macOS
+hosts the bind mount exposes them as real symlinks: following one would let a
+harness read or write land outside the workspace. Host-side file access goes
+through `_safe_resolve`, which refuses any symlinked path component, and no
+container process outlives the command that started it, so nothing can swap a
+path while the host is using it.
 """
 from __future__ import annotations
 
@@ -45,6 +53,21 @@ DEFAULT_IMAGE = "cerberus-sandbox:py3.11"
 HARNESS_DIR = ".cerberus"
 
 CONTAINER_WORKDIR = "/workspace"
+
+#: PID 1 of every container: reaps orphaned processes, so processes killed after a
+#: command do not linger as zombies that count against the PID limit.
+_REAPER = (
+    "import os, time\n"
+    "while True:\n"
+    "    try:\n"
+    "        os.waitpid(-1, 0)\n"
+    "    except ChildProcessError:\n"
+    "        time.sleep(0.5)\n"
+)
+
+#: Runs one command under an in-container kill timer, then kills every process the
+#: command left behind (kill -1 spares PID 1 and the calling shell).
+_EXEC_WRAPPER = 'umask 0000; timeout -s KILL "$1" sh -c "$2"; rc=$?; kill -9 -1 2>/dev/null; exit $rc'
 
 #: Host variables passed through in host-unsafe mode. Everything else, including
 #: GITHUB_TOKEN and model API keys, is dropped.
@@ -268,27 +291,23 @@ class Sandbox:
         _run_host_git(["config", "user.name", "Cerberus"], cwd=self.workspace_dir)
         _run_host_git(["config", "user.email", "cerberus@localhost"], cwd=self.workspace_dir)
         self.ensure_harness_dir()
+        # Written once, before any repository code runs; afterwards .git is untrusted.
+        exclude = self._safe_resolve(os.path.join(".git", "info", "exclude"))
+        os.makedirs(os.path.dirname(exclude), exist_ok=True)
+        with open(exclude, "a", encoding="utf-8") as f:
+            f.write(f"\n/{HARNESS_DIR}/\n")
 
     def ensure_harness_dir(self) -> str:
-        """Create `.cerberus/` for harness files and hide it from git.
+        """Create `.cerberus/` for harness files.
 
         Files written there (reproduction tests, JUnit reports) never appear in a
-        diff, are never collected by a normal pytest run (hidden directory), and
-        are never committed.
+        diff (the clone's .git/info/exclude hides the directory), are never
+        collected by a normal pytest run (hidden directory), and are never committed.
         """
-        path = os.path.join(self.workspace_dir, HARNESS_DIR)
+        path = self._safe_resolve(HARNESS_DIR)
+        if os.path.lexists(path) and not os.path.isdir(path):
+            raise WorkspaceError(f"{HARNESS_DIR} in the workspace is not a directory.")
         os.makedirs(path, exist_ok=True)
-        info_dir = os.path.join(self.workspace_dir, ".git", "info")
-        if os.path.isdir(os.path.join(self.workspace_dir, ".git")):
-            os.makedirs(info_dir, exist_ok=True)
-            exclude = os.path.join(info_dir, "exclude")
-            existing = ""
-            if os.path.exists(exclude):
-                with open(exclude, "r", encoding="utf-8") as f:
-                    existing = f.read()
-            if f"/{HARNESS_DIR}/" not in existing.splitlines():
-                with open(exclude, "a", encoding="utf-8") as f:
-                    f.write(f"\n/{HARNESS_DIR}/\n")
         return path
 
     def run_setup(self, commands: Sequence[str], timeout: Optional[int] = None) -> List[ExecResult]:
@@ -386,7 +405,7 @@ class Sandbox:
             "-v", f"{os.path.abspath(self.workspace_dir)}:{CONTAINER_WORKDIR}",
             "-w", CONTAINER_WORKDIR,
             image,
-            "sleep", "infinity",
+            CONTAINER_PYTHON, "-c", _REAPER,
         ]
 
     def _prepare_mount(self) -> None:
@@ -417,11 +436,11 @@ class Sandbox:
     def _docker_exec(self, container: str, cmd: str, timeout: int) -> ExecResult:
         start = time.time()
         # The kill timer runs inside the container: timing out the docker CLI on
-        # the host would leave the process running in the container.
+        # the host would leave the process running in the container. The command
+        # is passed as a positional argument, never interpolated into the wrapper.
         args = [
             "exec", "-w", CONTAINER_WORKDIR, container,
-            "timeout", "-s", "KILL", str(int(timeout)),
-            "sh", "-c", f"umask 0000; {cmd}",
+            "sh", "-c", _EXEC_WRAPPER, "sh", str(int(timeout)), cmd,
         ]
         try:
             proc = self._docker(args, timeout=int(timeout) + 30)
@@ -439,13 +458,36 @@ class Sandbox:
 
     # ------------------------------------------------------------- commands
 
-    def _safe_resolve(self, rel_path: str) -> str:
-        """Ensure rel_path does not escape workspace_dir (prevent path traversal)."""
+    def _safe_resolve(self, rel_path: str, allow_final_symlink: bool = False) -> str:
+        """Host path for a workspace file: no traversal, and no symlinked component.
+
+        `allow_final_symlink` is only for unlinking, which removes a link without
+        following it.
+        """
         abs_workspace = os.path.abspath(self.workspace_dir)
         target = os.path.abspath(os.path.join(self.workspace_dir, rel_path))
-        if os.path.commonpath([abs_workspace, target]) != abs_workspace:
+        if os.path.commonpath([abs_workspace, target]) != abs_workspace or target == abs_workspace:
             raise ValueError(f"Path traversal detected: '{rel_path}' escapes sandbox workspace.")
+        parts = os.path.relpath(target, abs_workspace).split(os.sep)
+        current = abs_workspace
+        for index, part in enumerate(parts):
+            current = os.path.join(current, part)
+            if os.path.islink(current) and not (allow_final_symlink and index == len(parts) - 1):
+                raise WorkspaceError(f"Refusing to follow a symlink in the workspace: {rel_path}")
         return target
+
+    def read_bytes(self, rel_path: str, max_bytes: Optional[int] = None) -> bytes:
+        """Read a workspace file without following symlinks. FileNotFoundError if absent."""
+        target = self._safe_resolve(rel_path)
+        fd = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+        with os.fdopen(fd, "rb") as f:
+            return f.read() if max_bytes is None else f.read(max_bytes)
+
+    def remove_file(self, rel_path: str) -> None:
+        """Remove a workspace file (or a symlink itself) if present."""
+        target = self._safe_resolve(rel_path, allow_final_symlink=True)
+        if os.path.lexists(target):
+            os.unlink(target)
 
     def exec(self, cmd: str, timeout: Optional[int] = None) -> ExecResult:
         """Execute a shell command against the workspace under the sandbox's isolation."""
@@ -492,17 +534,23 @@ class Sandbox:
             )
 
     def write_file(self, rel_path: str, content: str) -> None:
+        self.write_bytes(rel_path, content.encode("utf-8"))
+
+    def write_bytes(self, rel_path: str, data: bytes) -> None:
+        """Write a workspace file without following symlinks."""
         target = self._safe_resolve(rel_path)
         os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "w", encoding="utf-8", newline="") as f:
-            f.write(content)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+        fd = os.open(target, flags, 0o666)
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
 
     def read_file(self, rel_path: str) -> str:
-        target = self._safe_resolve(rel_path)
-        if not os.path.exists(target):
-            raise FileNotFoundError(f"{rel_path} does not exist in sandbox.")
-        with open(target, "r", encoding="utf-8", newline="", errors="replace") as f:
-            return f.read()
+        try:
+            data = self.read_bytes(rel_path)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"{rel_path} does not exist in sandbox.") from None
+        return data.decode("utf-8", errors="replace")
 
     def destroy(self) -> None:
         if not self.is_alive:

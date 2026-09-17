@@ -78,11 +78,14 @@ class DiffUtils:
 
     @staticmethod
     def extract_diff_from_markdown(text: str) -> str:
-        """Extracts unified diff content from LLM markdown code blocks."""
+        """Extracts unified diff content from LLM markdown code blocks.
+
+        Only surrounding line breaks are removed. A hunk's last context line is a
+        single space when the source line is empty; stripping all whitespace
+        deletes it and git rejects the hunk as corrupt.
+        """
         match = re.search(r"```(?:diff|patch)?\n(.*?)```", text, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        return text.strip()
+        return (match.group(1) if match else text).strip("\r\n")
 
     @staticmethod
     def parse_targeted_files(diff_text: str) -> List[str]:
@@ -164,11 +167,11 @@ class DiffUtils:
         """
         base = _diff_base(sandbox)
         sandbox.exec(f"git reset -q --hard {base}")
-        sandbox.exec("git clean -fdq")
+        sandbox.exec(f"git clean -fdq -e /{HARNESS_DIR}/")
 
     @staticmethod
     def _untracked_files(sandbox: Sandbox) -> List[str]:
-        res = sandbox.exec("git ls-files --others --exclude-standard -z")
+        res = sandbox.exec(f"git ls-files --others --exclude-standard -x /{HARNESS_DIR}/ -z")
         return [p for p in res.stdout.split("\0") if p]
 
     @staticmethod

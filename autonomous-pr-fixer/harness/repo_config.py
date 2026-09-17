@@ -177,6 +177,9 @@ def parse_repo_config(text: str) -> RepoConfig:
 def load_repo_config(workspace_dir: str) -> RepoConfig:
     """Load `.cerberus.yml` from a workspace. Absent file -> defaults with present=False."""
     path = os.path.join(workspace_dir, CONFIG_FILENAME)
+    if os.path.islink(path):
+        # A committed symlink would make the host read a file outside the repository.
+        raise RepoConfigError(f"{CONFIG_FILENAME} is a symlink; the verification policy must be a regular file.")
     if not os.path.isfile(path):
         return RepoConfig()
     if os.path.getsize(path) > MAX_CONFIG_BYTES:

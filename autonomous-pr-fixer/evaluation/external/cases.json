@@ -1,0 +1,72 @@
+{
+  "description": "Real bug fixes from open-source Python projects not written by the Cerberus author, verified in the Docker sandbox. Each bug is pinned to its upstream fix commit; the reproduction test is the test that commit added. Wrong variants are hand-made from the same bug.",
+  "repos": {
+    "sqlparse": {"url": "https://github.com/andialbrecht/sqlparse.git", "license": "BSD-3-Clause"},
+    "boltons": {"url": "https://github.com/mahmoud/boltons.git", "license": "BSD-3-Clause"},
+    "more-itertools": {"url": "https://github.com/more-itertools/more-itertools.git", "license": "MIT"}
+  },
+  "bugs": [
+    {
+      "id": "sqlparse-332",
+      "repo": "sqlparse",
+      "fix_commit": "f66d12c245412f28c58f045b646eb53c0e691b8b",
+      "source_paths": ["sqlparse/"],
+      "test_path": "tests/test_parse.py",
+      "test_header": "import sqlparse\n\n\n",
+      "issue": {
+        "number": 332,
+        "title": "get_real_name returns an intermediate component for names with more than two dotted parts",
+        "body": "For a fully-qualified identifier such as db.schema.tbl.col, Identifier.get_real_name() returns 'schema' instead of 'col'. get_name() is affected too. Two-part names like a.b are correct."
+      },
+      "variants": [
+        {"id": "upstream-fix", "patch": "fix", "expect": ["ADMITTED", null]},
+        {"id": "upstream-commit", "change": "commit", "expect": ["ADMITTED", null],
+         "note": "the unmodified upstream commit, which appends its test to an existing test file"},
+        {"id": "regressing", "patch": "patches/sqlparse-332-regressing.diff", "expect": ["REFUSED", "REGRESSION"],
+         "note": "fixes the bug but also strips identifier quoting"},
+        {"id": "test-weakening", "patch": "patches/sqlparse-332-weakening.diff", "expect": ["REFUSED", "SCOPE_VIOLATION"],
+         "note": "the regressing patch plus edits to the three existing tests it breaks"}
+      ]
+    },
+    {
+      "id": "boltons-backoff",
+      "repo": "boltons",
+      "fix_commit": "ead236e278ca0466bf468de746b5960fb12d7e5b",
+      "source_paths": ["boltons/"],
+      "test_path": "tests/test_iterutils.py",
+      "test_header": "import pytest\n\n\n",
+      "issue": {
+        "number": 1,
+        "title": "backoff_iter with factor=1.0 and no count raises ZeroDivisionError",
+        "body": "`backoff_iter` and `backoff` accept factor >= 1.0, but calling `backoff(1, 10, factor=1.0)` without a count crashes with ZeroDivisionError from math.log. A constant factor should either work (start == stop) or raise a clear ValueError."
+      },
+      "variants": [
+        {"id": "upstream-fix", "patch": "fix", "expect": ["ADMITTED", null]},
+        {"id": "upstream-commit", "change": "commit", "expect": ["ADMITTED", null]},
+        {"id": "incomplete", "patch": "patches/boltons-backoff-incomplete.diff", "expect": ["REFUSED", "GREEN_NOT_REACHED"],
+         "note": "raises ValueError for every factor of 1.0, including start == stop"}
+      ]
+    },
+    {
+      "id": "moreitertools-last",
+      "repo": "more-itertools",
+      "fix_commit": "cca32949f12d473fd823e37a5530c30d2faa1332",
+      "source_paths": ["more_itertools/"],
+      "test_path": "tests/test_more.py",
+      "test_header": "from unittest import TestCase\n\nimport more_itertools as mi\n\n\nclass LastTests(TestCase):\n",
+      "issue": {
+        "number": 1001,
+        "title": "last() raises ValueError when __reversed__ is None",
+        "body": "`mi.last(obj)` for an iterable whose class sets `__reversed__ = None` (the documented way to opt out of reversal) raises ValueError instead of returning the last item. `hasattr(iterable, '__reversed__')` is true, so `reversed()` is called and its TypeError is swallowed."
+      },
+      "variants": [
+        {"id": "upstream-fix", "patch": "fix", "expect": ["ADMITTED", null]},
+        {"id": "upstream-commit", "change": "commit", "expect": ["ADMITTED", null]},
+        {"id": "invalid-reproduction", "patch": "fix", "repro": "tests/moreitertools-last-import-error.py",
+         "expect": ["REFUSED", "RED_INVALID_TEST"], "note": "the upstream test plus an import that does not exist"},
+        {"id": "non-reproducing-test", "patch": "fix", "repro": "tests/moreitertools-last-not-failing.py",
+         "expect": ["REFUSED", "RED_NOT_FAILING"], "note": "a test that already passes on the buggy code"}
+      ]
+    }
+  ]
+}

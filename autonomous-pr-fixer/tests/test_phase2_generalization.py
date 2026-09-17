@@ -122,6 +122,11 @@ def test_patch_may_not_edit_the_verification_policy(scenario, _isolated_run_arti
     assert _run(scenario, patch_source=DiffPatchSource([loosen])) is False
     data = _artifact(_isolated_run_artifacts)
     assert data["refusal"]["code"] == "GREEN_NOT_REACHED"
+    # The evidence says why: the patch never applied, rather than "the test did not pass".
+    assert "APPLY_ERROR" in data["refusal"]["message"] and ".cerberus.yml" in data["refusal"]["message"]
+    assert data["patch_attempts"] == 1
+    assert [h["status"] for h in data["patch_history"]] == ["APPLY_ERROR", "ABORT_DUPLICATE_DIFF"]
+    assert data["patch_history"][0]["applied"] is False
 
 
 # ------------------------------------------------- verifying an existing change
@@ -174,6 +179,71 @@ def test_change_that_weakens_an_existing_test_is_refused(scenario, tmp_path, _is
     data = _artifact(_isolated_run_artifacts)
     assert data["refusal"]["code"] == "SCOPE_VIOLATION"
     assert data["blast_radius"]["modified_test_files"] == ["tests/test_rate_calculator.py"]
+
+
+def _existing_tests(scenario):
+    from pathlib import Path
+
+    return (Path(scenario.repo_dir) / "tests" / "test_rate_calculator.py").read_text(encoding="utf-8")
+
+
+def test_change_that_adds_a_test_to_an_existing_test_file_is_admitted(scenario, tmp_path, _isolated_run_artifacts):
+    """The shape of most real fixes: the source change plus a new test appended to an existing file."""
+    extended = _existing_tests(scenario) + "\n\ndef test_zero_total():\n    assert calculate_rate(3, 0) == 0.0\n"
+    base, head = _branch_with_fix(scenario, extra={"tests/test_rate_calculator.py": extended})
+    repro = tmp_path / "repro.py"
+    repro.write_text(scenario.repro_test_code, encoding="utf-8")
+
+    assert _cli_verify(scenario, base, head, repro) == 0
+    data = _artifact(_isolated_run_artifacts)
+    assert data["final_state"] == "ADMITTED"
+    assert data["blast_radius"]["modified_test_files"] == []
+    assert data["blast_radius"]["extended_test_files"] == ["tests/test_rate_calculator.py"]
+    assert data["regression_results"]["test_files_run_at_base"] == ["tests/test_rate_calculator.py"]
+    # The patch's version was restored after the regression run: scope still sees the added test.
+    assert "tests/test_rate_calculator.py::test_zero_total" in data["blast_radius"]["changed_symbols"]
+
+
+def test_lines_added_to_an_existing_test_cannot_hide_a_regression(scenario, tmp_path, _isolated_run_artifacts):
+    """An early return added to a test the patch breaks is additions-only; the base version still runs."""
+    breaking_fix = FIX_BODY.replace("    return amount / total\n", "    return float(round(amount / total))\n")
+    original = _existing_tests(scenario)
+    assert "def test_fractional_rate():\n" in original
+    hidden = original.replace("def test_fractional_rate():\n", "def test_fractional_rate():\n    return\n")
+    base, head = _branch_with_fix(scenario, extra={"rate_calculator.py": breaking_fix, "tests/test_rate_calculator.py": hidden})
+    repro = tmp_path / "repro.py"
+    repro.write_text(scenario.repro_test_code, encoding="utf-8")
+
+    assert _cli_verify(scenario, base, head, repro) == 1
+    data = _artifact(_isolated_run_artifacts)
+    assert data["refusal"]["code"] == "REGRESSION"
+    assert data["regression_results"]["newly_failing"] == ["tests.test_rate_calculator::test_fractional_rate"]
+    assert data["regression_results"]["test_files_run_at_base"] == ["tests/test_rate_calculator.py"]
+
+
+def test_split_test_changes_only_treats_pure_additions_as_extensions():
+    from harness.diff_utils import WorkspaceChanges
+    from harness.scope_gate import split_test_changes
+
+    changes = WorkspaceChanges(
+        diff_text="",
+        files=["tests/test_a.py", "tests/test_b.py", "tests/conftest.py", "tests/test_gone.py",
+               "tests/test_new.py", "tests/data.bin", "src/mod.py"],
+        new_files=["tests/test_new.py"],
+        deleted_files=["tests/test_gone.py"],
+        per_file_numstat={
+            "tests/test_a.py": (5, 0),        # additions only
+            "tests/test_b.py": (5, 1),        # one existing line changed
+            "tests/conftest.py": (3, 0),      # additions, but conftest changes every test beside it
+            "tests/test_gone.py": (0, 12),
+            "tests/test_new.py": (8, 0),
+            "tests/data.bin": (0, 0),         # binary
+            "src/mod.py": (2, 2),
+        },
+    )
+    modified, extended = split_test_changes(changes)
+    assert extended == ["tests/test_a.py"]
+    assert modified == ["tests/test_b.py", "tests/conftest.py", "tests/test_gone.py", "tests/data.bin"]
 
 
 def test_configured_allowed_paths_restrict_an_existing_change(scenario, tmp_path, _isolated_run_artifacts):

@@ -1,0 +1,2 @@
+# Patches and tests must keep LF endings on every platform or they stop applying cleanly.
+* text=auto eol=lf

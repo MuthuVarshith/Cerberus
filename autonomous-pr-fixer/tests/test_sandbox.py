@@ -134,7 +134,11 @@ def test_repair_container_is_isolated_and_carries_no_host_secrets(docker_env, mo
     assert all(v.split("=")[0] in {"HOME", "PYTHONDONTWRITEBYTECODE", "PYTHONUNBUFFERED", "GIT_TERMINAL_PROMPT"} for v in env_values)
 
     exec_call = next(c for c in docker_env.calls if c[0] == "exec")
-    assert exec_call[exec_call.index("timeout"):exec_call.index("timeout") + 4] == ["timeout", "-s", "KILL", "7"]
+    wrapper = exec_call[exec_call.index("-c") + 1]
+    assert 'timeout -s KILL "$1"' in wrapper and "kill -9 -1" in wrapper
+    # Timeout and command are positional arguments, never spliced into the wrapper.
+    assert exec_call[-2:] == ["7", "python -m pytest -q"]
+    assert run[run.index("cerberus-sandbox:py3.11") + 1:][:2] == ["python", "-c"]
     assert any(c[:2] == ["rm", "-f"] for c in docker_env.calls)
 
 
@@ -201,3 +205,119 @@ def test_workspace_is_a_clone_of_committed_head(tmp_path):
 def test_non_git_source_is_refused(tmp_path):
     with pytest.raises(ds.WorkspaceError, match="not a git repository"):
         Sandbox(base_dir=str(tmp_path))
+
+
+# ---------------------------------------------------------------------------
+# Symlinks. Repository content and code running in the container can plant
+# symlinks in the workspace; the host must never follow one. Most of these need
+# symlink support on the machine running the tests (Linux and macOS; Windows only
+# with Developer Mode), and are skipped elsewhere.
+# ---------------------------------------------------------------------------
+
+def _can_symlink(tmp_path) -> bool:
+    try:
+        os.symlink(str(tmp_path / "target"), str(tmp_path / "probe-link"))
+    except (OSError, NotImplementedError):
+        return False
+    os.unlink(str(tmp_path / "probe-link"))
+    return True
+
+
+@pytest.fixture
+def symlinks(tmp_path):
+    if not _can_symlink(tmp_path):
+        pytest.skip("symlinks are not available to this user on this machine")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    victim = outside / "victim.txt"
+    victim.write_text("host content\n", encoding="utf-8")
+    return outside, victim
+
+
+def test_write_through_a_symlinked_directory_is_refused(symlinks):
+    outside, victim = symlinks
+    with Sandbox() as sb:
+        os.symlink(str(outside), os.path.join(sb.workspace_dir, "linked"))
+        with pytest.raises(ds.WorkspaceError, match="symlink"):
+            sb.write_file("linked/victim.txt", "overwritten")
+        with pytest.raises(ds.WorkspaceError, match="symlink"):
+            sb.read_file("linked/victim.txt")
+    assert victim.read_text(encoding="utf-8") == "host content\n"
+
+
+def test_symlinked_harness_files_are_neither_written_nor_read(symlinks):
+    _, victim = symlinks
+    from harness.junit import JUnitReportError, read_workspace_junit_report
+
+    with Sandbox() as sb:
+        sb.ensure_harness_dir()
+        link = os.path.join(sb.workspace_dir, ".cerberus", "candidate.patch")
+        os.symlink(str(victim), link)
+        with pytest.raises(ds.WorkspaceError):
+            sb.write_file(".cerberus/candidate.patch", "attacker-controlled diff")
+        os.symlink(str(victim), os.path.join(sb.workspace_dir, ".cerberus", "regression.xml"))
+        with pytest.raises(JUnitReportError):
+            read_workspace_junit_report(sb, ".cerberus/regression.xml")
+        # Removing a planted link removes the link, not what it points to.
+        sb.remove_file(".cerberus/candidate.patch")
+        assert not os.path.lexists(link)
+    assert victim.read_text(encoding="utf-8") == "host content\n"
+
+
+def test_symlinked_harness_directory_is_refused(symlinks):
+    outside, victim = symlinks
+    with Sandbox() as sb:
+        os.symlink(str(outside), os.path.join(sb.workspace_dir, ".cerberus"))
+        with pytest.raises(ds.WorkspaceError):
+            sb.ensure_harness_dir()
+        with pytest.raises(ds.WorkspaceError):
+            sb.write_file(".cerberus/test_reproduce.py", "x = 1\n")
+    assert sorted(os.listdir(str(outside))) == ["victim.txt"]
+
+
+def test_symlinked_repo_config_is_refused(symlinks, tmp_path):
+    _, victim = symlinks
+    from harness.repo_config import RepoConfigError, load_repo_config
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    os.symlink(str(victim), str(ws / ".cerberus.yml"))
+    with pytest.raises(RepoConfigError, match="symlink"):
+        load_repo_config(str(ws))
+
+
+def test_repository_scanners_skip_symlinked_files(symlinks, tmp_path):
+    outside, _ = symlinks
+    from agents.reproduction_agent import repository_symbols
+    from retrieval.lexical_search import LexicalSearch
+
+    (outside / "secret_module.py").write_text("def host_only_function():\n    pass\n", encoding="utf-8")
+    ws = tmp_path / "scan"
+    ws.mkdir()
+    (ws / "real.py").write_text("def repo_function():\n    pass\n", encoding="utf-8")
+    os.symlink(str(outside / "secret_module.py"), str(ws / "linked.py"))
+    symbols = repository_symbols(str(ws))
+    assert "repo_function" in symbols and "host_only_function" not in symbols
+    assert not LexicalSearch(str(ws)).search("host_only_function")
+
+
+def test_committed_harness_symlink_fails_closed(tmp_path):
+    """A repository that commits `.cerberus` as a symlink cannot become a workspace.
+
+    Built with git plumbing, so it runs without OS symlink support: git checks the
+    link out as a symlink where it can, and as a plain file elsewhere; both are refused.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+
+    def git(*args, **kw):
+        return _subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True, **kw)
+
+    for args in (["init", "-q"], ["config", "user.name", "t"], ["config", "user.email", "t@t"], ["add", "a.py"]):
+        git(*args)
+    blob = git("hash-object", "-w", "--stdin", input=str(tmp_path / "outside")).stdout.strip()
+    git("update-index", "--add", "--cacheinfo", f"120000,{blob},.cerberus")
+    git("commit", "-q", "-m", "commit a harness symlink")
+    with pytest.raises(ds.WorkspaceError):
+        Sandbox(base_dir=str(repo))
