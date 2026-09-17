@@ -20,7 +20,8 @@ def test_e2e_successful_repair_pipeline():
             issue_title="Divide by zero in rate_calculator",
             issue_body="calculate_rate(10, 0) throws ZeroDivisionError",
             dry_run=True,
-            mode="local"
+            mode="local",
+            demo=True
         )
         
         # 1. Pipeline should return True (PR Admitted Locally)

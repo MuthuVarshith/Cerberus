@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 import uuid
 from typing import Dict, Optional
@@ -28,13 +29,51 @@ from harness.config import load_config
 from harness.logger import log_event
 from harness.run_artifact import write_run_artifact
 from agents.triage_agent import TriageAgent
-from agents.reproduction_agent import ReproductionAgent
+from agents.reproduction_agent import ReproductionAgent, ReproductionResult
 from agents.localization_agent import LocalizationAgent
 from agents.patch_agent import PatchAgent, PatchLoopResult
 from agents.regression_agent import RegressionAgent
+from agents.repo_setup_agent import RepoSetupAgent
 from agents.llm_patch_generator import LLMPatchGenerator, has_api_key
 from agents.llm_reproduction_synthesizer import LLMReproductionSynthesizer
 from github.pr_publisher import PRPublisher
+
+
+DEMO_RATE_FILE = "rate_calculator.py"
+
+
+def _workspace_has_user_code(workspace_dir: str) -> bool:
+    ignored_dirs = {".git", ".pytest_cache", "__pycache__", "artifacts"}
+    for root, dirs, files in os.walk(workspace_dir):
+        dirs[:] = [d for d in dirs if d not in ignored_dirs and not d.startswith(".venv")]
+        for name in files:
+            if name.endswith((".py", ".js", ".ts", ".go", ".rs", ".java", ".c", ".cpp", ".h")):
+                rel = os.path.relpath(os.path.join(root, name), workspace_dir).replace("\\", "/")
+                if not rel.startswith("test_reproduce.py"):
+                    return True
+    return False
+
+
+def _parse_referenced_file(issue_body: str, workspace_dir: str) -> Optional[str]:
+    match = re.search(r"\bat\s+([\w./\\-]+)(?::\d+)?", issue_body)
+    if not match:
+        return None
+    parsed_path = match.group(1).replace("\\", "/").split(":")[0]
+    if os.path.exists(os.path.join(workspace_dir, parsed_path)):
+        return parsed_path
+    return None
+
+
+def _write_demo_repository(sb: Sandbox) -> str:
+    buggy_code = (
+        "def calculate_rate(amount: float, total: float) -> float:\n"
+        "    \"\"\"Calculate the rate as amount / total.\"\"\"\n"
+        "    return amount / total\n"
+    )
+    sb.write_file(DEMO_RATE_FILE, buggy_code)
+    sb.exec(f"git add {DEMO_RATE_FILE}")
+    sb.exec("git commit -m \"Initial commit with baseline rate calculator\"")
+    return DEMO_RATE_FILE
 
 
 def _llm_patching_enabled(explicit: Optional[bool] = None) -> bool:
@@ -67,6 +106,7 @@ def run_pipeline(
     use_llm_repro: Optional[bool] = None,
     fork_owner: Optional[str] = None,
     run_id: Optional[str] = None,
+    demo: bool = False,
 ) -> bool:
     run_id = run_id or f"run_{uuid.uuid4().hex[:10]}"
     cfg = load_config()
@@ -82,41 +122,47 @@ def run_pipeline(
         return False
 
     with Sandbox(base_dir=repo_dir, timeout_sec=cfg.sandbox_timeout_seconds) as sb:
-        # Initialize git in the sandbox if needed so diff tracking is authoritative
-        sb.exec("git init")
+        # Only run 'git init' if the workspace is NOT already a git repository
+        # (i.e., for the offline demo mode). For real cloned repos, git init
+        # can reinitialize and cause core.autocrlf settings to flip, making
+        # every file in the repo appear as modified in git diff HEAD on Windows.
+        git_dir_check = sb.exec("git rev-parse --git-dir")
+        if git_dir_check.exit_code != 0:
+            sb.exec("git init")
+
         sb.exec("git config user.name \"Cerberus\"")
         sb.exec("git config user.email \"cerberus@autonomous.local\"")
+        # Disable CRLF auto-conversion so git diff HEAD is not polluted by
+        # line-ending differences on Windows (would show entire repo as modified).
+        sb.exec("git config core.autocrlf false")
+        sb.exec("git config core.eol lf")
+        # Renormalize the index so git diff HEAD is clean before any patches.
+        # On Windows, autocrlf can cause every file to appear as "modified"
+        # (CRLF vs LF) even on a fresh clone. Resetting the index to match
+        # the actual working tree state establishes a trustworthy baseline.
+        has_head = sb.exec("git rev-parse --verify HEAD").exit_code == 0
+        if has_head:
+            sb.exec("git rm -r --cached . -q")
+            sb.exec("git add -A")
+            sb.exec("git commit --amend --no-edit --no-verify -q")
 
-        import re
-        target_code_file = None
-        
-        # Try to parse the real file path from the issue body (e.g., "at backend/app/config.py:27")
-        match = re.search(r"at ([\w\.\/\-]+)", issue_body)
-        if match:
-            parsed_path = match.group(1).split(':')[0]
-            if os.path.exists(os.path.join(sb.workspace_dir, parsed_path)):
-                target_code_file = parsed_path
-                
-        # Fallback to demo logic if no file found in real repo
-        has_votevault = False
-        if not target_code_file:
-            has_votevault = os.path.exists(os.path.join(sb.workspace_dir, "app.py")) and (
-                "vote" in issue_title.lower() or "export_votes" in issue_title.lower() or "export_votes" in issue_body.lower()
-            )
-            if has_votevault:
-                target_code_file = "app.py"
-            else:
-                target_code_file = "rate_calculator.py"
-                target_path = os.path.join(sb.workspace_dir, target_code_file)
-                if not os.path.exists(target_path) or "calculate_rate" in issue_body:
-                    buggy_code = (
-                        "def calculate_rate(amount: float, total: float) -> float:\n"
-                        "    \"\"\"Calculate the rate as amount / total.\"\"\"\n"
-                        "    return amount / total\n"
-                    )
-                    sb.write_file(target_code_file, buggy_code)
-                    sb.exec(f"git add {target_code_file}")
-                    sb.exec("git commit -m \"Initial commit with baseline rate calculator\"")
+        setup_agent = RepoSetupAgent(sb)
+        setup_plan = setup_agent.detect()
+        target_code_file = _parse_referenced_file(issue_body, sb.workspace_dir)
+        workspace_has_user_code = _workspace_has_user_code(sb.workspace_dir)
+
+        has_votevault = os.path.exists(os.path.join(sb.workspace_dir, "app.py")) and (
+            "vote" in issue_title.lower() or "export_votes" in issue_title.lower() or "export_votes" in issue_body.lower()
+        )
+        is_demo_run = False
+        if demo:
+            target_code_file = _write_demo_repository(sb)
+            is_demo_run = True
+        elif not target_code_file and has_votevault:
+            target_code_file = "app.py"
+        elif not target_code_file and not workspace_has_user_code:
+            target_code_file = _write_demo_repository(sb)
+            is_demo_run = True
 
         # [1/8] TRIAGE
         print("\n[1/8] TRIAGE")
@@ -127,13 +173,23 @@ def run_pipeline(
         sm.transition(PipelineState.TRIAGED)
         print(f"  [OK] Language: {triage_report.language}")
         print(f"  [OK] Framework: {triage_report.test_framework}")
-        err_str = ", ".join(triage_report.error_signatures) if triage_report.error_signatures else ("ValueError" if has_votevault else "ZeroDivisionError")
+        err_str = ", ".join(triage_report.error_signatures) if triage_report.error_signatures else ("ValueError" if has_votevault else "unknown")
         print(f"  [OK] Error Signature: {err_str}")
+        print(f"  [OK] Repo setup: {setup_plan.package_manager}/{setup_plan.test_framework} ({setup_plan.reason})")
         log_event(run_id, "TRIAGE", "PASS", issue_number, f"Triaged as {triage_report.language}")
 
         # INDEXING (internal preparation for retrieval)
         sm.transition(PipelineState.INDEXING)
         sm.transition(PipelineState.INDEXED)
+
+        if setup_plan.install_commands:
+            print("\n[SETUP] DEPENDENCIES")
+            for cmd in setup_plan.install_commands:
+                print(f"  -> {cmd}")
+            if not setup_agent.install(setup_plan, timeout=max(cfg.sandbox_timeout_seconds, 120)):
+                print("  [FAIL] Repository dependency installation failed")
+                return False
+            print("  [OK] Repository dependencies installed")
 
         # [2/8] REPRODUCTION
         print("\n[2/8] REPRODUCTION")
@@ -143,29 +199,37 @@ def run_pipeline(
 
         want_repro_llm = _llm_repro_enabled(use_llm_repro)
         if want_repro_llm and not has_api_key():
-            print("  [WARN] --use-llm-repro requested but no ANTHROPIC_API_KEY/OPENAI_API_KEY is set.")
+            print("  [WARN] --use-llm-repro requested but no ANTHROPIC_API_KEY/OPENAI_API_KEY/GEMINI_API_KEY is set.")
             print("         Falling back to the deterministic scripted reproduction test.")
             want_repro_llm = False
 
         repro_res: Optional[ReproductionResult] = None
         repro_tokens = 0
         if want_repro_llm:
-            print(f"  -> Model-generated reproduction test, boundary: {target_code_file}")
-            repro_synth = LLMReproductionSynthesizer(
-                sandbox=sb,
-                candidate_files=[target_code_file],
-                issue_title=issue_title,
-                issue_body=issue_body,
-            )
-            print(f"  -> Model: {repro_synth.model}")
-            synth_res = repro_synth.synthesize_and_verify(max_attempts=3)
-            repro_tokens = repro_synth.usage.total_tokens
-            if synth_res.reproduced:
-                repro_res = synth_res
-                print(f"  [OK] Generated and verified test_reproduce.py via model ({repro_tokens} tokens)")
+            if not target_code_file:
+                print("  [WARN] No concrete target file was found before LLM reproduction.")
+                print("         Localization will run, but reproduction synthesis needs a repair boundary.")
+                want_repro_llm = False
             else:
-                print(f"  [WARN] Model reproduction failed: {synth_res.error_message}")
-                print("         Falling back to the deterministic scripted reproduction test.")
+                print(f"  -> Model-generated reproduction test, boundary: {target_code_file}")
+                repro_synth = LLMReproductionSynthesizer(
+                    sandbox=sb,
+                    candidate_files=[target_code_file],
+                    issue_title=issue_title,
+                    issue_body=issue_body,
+                )
+                print(f"  -> Model: {repro_synth.model}")
+                synth_res = repro_synth.synthesize_and_verify(max_attempts=3)
+                repro_tokens = repro_synth.usage.total_tokens
+                if synth_res.reproduced:
+                    repro_res = synth_res
+                    print(f"  [OK] Generated and verified test_reproduce.py via model ({repro_tokens} tokens)")
+                else:
+                    print(f"  [WARN] Model reproduction failed: {synth_res.error_message}")
+                    if is_demo_run or has_votevault:
+                        print("         Falling back to the deterministic scripted reproduction test.")
+                    else:
+                        print("         No scripted reproduction exists for real repositories.")
 
         if repro_res is None:
             if has_votevault:
@@ -184,7 +248,7 @@ def run_pipeline(
                     "    resp = client.get('/export_votes')\n"
                     "    assert resp.status_code == 200, f'Expected 200 OK, got {resp.status_code}'\n"
                 )
-            else:
+            elif is_demo_run:
                 repro_code = (
                     "# Standalone minimal reproduction test\n"
                     "import pytest\n"
@@ -193,15 +257,26 @@ def run_pipeline(
                     "    # Zero total should safely return 0.0 rather than raising ZeroDivisionError\n"
                     "    assert calculate_rate(10, 0) == 0.0\n"
                 )
+            else:
+                repro_res = ReproductionResult(
+                    reproduced=False,
+                    test_code="",
+                    error_message="No verified reproduction test is available for this real repository. Use --use-llm-repro with a concrete file reference, or run a static-analysis repair with an explicit file path.",
+                    returncode=-1,
+                    raw_output="",
+                )
+                print("  [FAIL] No scripted reproduction is available for real repositories")
+                repro_code = ""
 
-            repro_res = repro_agent.run_reproduction_gate(issue_title, issue_body, repro_code)
-            print("  [OK] Generated test_reproduce.py")
+            if repro_code:
+                repro_res = repro_agent.run_reproduction_gate(issue_title, issue_body, repro_code)
+                print("  [OK] Generated test_reproduce.py")
 
         # [3/8] RED GATE
         print("\n[3/8] RED GATE")
         static_analysis_mode = False
         if not repro_res.reproduced:
-            if target_code_file and not has_votevault and target_code_file != "rate_calculator.py":
+            if target_code_file and not has_votevault and not is_demo_run:
                 print("  [WARN] RED reproduction failed, but proceeding in Static Analysis Mode")
                 sm.transition(PipelineState.REPRODUCED_RED)
                 log_event(run_id, "RED_GATE", "PASS", issue_number, "RED bypassed (Static Analysis)")
@@ -225,9 +300,12 @@ def run_pipeline(
                 )
                 return False
 
-        sm.transition(PipelineState.REPRODUCED_RED)
-        log_event(run_id, "RED_GATE", "PASS", issue_number, "RED reproduction confirmed")
-        print("  [OK] RED reproduction confirmed (test fails on unpatched repo)")
+        if static_analysis_mode:
+            print("  [OK] Static analysis mode accepted with explicit target file")
+        else:
+            sm.transition(PipelineState.REPRODUCED_RED)
+            log_event(run_id, "RED_GATE", "PASS", issue_number, "RED reproduction confirmed")
+            print("  [OK] RED reproduction confirmed (test fails on unpatched repo)")
 
         # [4/8] LOCALIZATION
         print("\n[4/8] LOCALIZATION")
@@ -242,10 +320,14 @@ def run_pipeline(
             max_candidates=3,
         )
         sm.transition(PipelineState.LOCALIZED)
-        top_matches = [c for c in loc_res.candidates if target_code_file in c.file]
+        top_matches = [c for c in loc_res.candidates if target_code_file and target_code_file in c.file]
         top_cand = top_matches[0] if top_matches else (loc_res.candidates[0] if loc_res.candidates else None)
-        top_1 = top_cand.symbol if top_cand else ("export_votes" if has_votevault else "calculate_rate")
+        top_1 = top_cand.symbol if top_cand else ("export_votes" if has_votevault else ("calculate_rate" if is_demo_run else "<unknown>"))
         top_file = top_cand.file if top_cand else target_code_file
+        if not top_file:
+            sm.transition(PipelineState.REJECTED_PATCH_FAILED)
+            print("  [FAIL] Could not localize a repair target file")
+            return False
         print(f"  [OK] Top-1 Candidate: {top_file}::{top_1}")
         print("  [OK] Top-3 candidates ranked and bounded")
         log_event(run_id, "LOCALIZATION", "PASS", issue_number, f"Top candidate: {top_file}")
@@ -261,9 +343,13 @@ def run_pipeline(
         if want_llm and not has_api_key():
             # Asked for, but impossible. Saying so beats quietly producing a
             # scripted patch and labelling it a model's work.
-            print("  [WARN] --use-llm requested but no ANTHROPIC_API_KEY/OPENAI_API_KEY is set.")
-            print("         Falling back to the deterministic scripted repair.")
-            want_llm = False
+            print("  [WARN] --use-llm requested but no ANTHROPIC_API_KEY/OPENAI_API_KEY/GEMINI_API_KEY is set.")
+            if is_demo_run or has_votevault:
+                print("         Falling back to the deterministic scripted repair.")
+                want_llm = False
+            else:
+                print("         Real repositories require LLM patching or a custom patch generator.")
+                return False
 
         if want_llm:
             print(f"  -> Model-generated patches, boundary: {top_file}")
@@ -307,7 +393,7 @@ def run_pipeline(
                     "StringIO(output.read())",
                     "BytesIO(output.getvalue().encode('utf-8'))"
                 )
-            else:
+            elif is_demo_run:
                 repaired_code = (
                     "def calculate_rate(amount: float, total: float) -> float:\n"
                     "    \"\"\"Calculate the rate as amount / total.\"\"\"\n"
@@ -315,6 +401,9 @@ def run_pipeline(
                     "        return 0.0\n"
                     "    return amount / total\n"
                 )
+            else:
+                print("  [FAIL] Scripted patching is only available for demo scenarios")
+                return False
 
             sb.write_file(top_file, repaired_code)
 
@@ -359,11 +448,15 @@ def run_pipeline(
         # PATCH_MAX_LINES_CHANGED is the configured minimal-patch budget; the
         # blast-radius gate is where it is actually enforced in this path.
         regr_agent = RegressionAgent(sb, max_total_lines=cfg.patch_max_lines_changed)
-        reg_cmd = (
-            f"{sb.python_cmd} -m pytest tests/test_sandbox.py -q"
-            if os.path.exists(os.path.join(sb.workspace_dir, "tests", "test_sandbox.py"))
-            else f"{sb.python_cmd} -c \"print('3 passed')\""
-        )
+        if is_demo_run and os.path.exists(os.path.join(sb.workspace_dir, "tests", "test_sandbox.py")):
+            reg_cmd = f"{sb.python_cmd} -m pytest tests/test_sandbox.py -q"
+        elif setup_plan.test_command:
+            reg_cmd = setup_plan.test_command
+        elif is_demo_run:
+            reg_cmd = f"{sb.python_cmd} -m pytest test_reproduce.py -q"
+        else:
+            print("  [FAIL] No regression test command detected for this repository")
+            return False
         regr_res = regr_agent.run_regression_suite([top_file], test_suite_cmd=reg_cmd)
         # Update blast radius with authoritative diff stats
         regr_res.blast_radius.observed_files = diff_stats["files"]
@@ -591,6 +684,12 @@ if __name__ == "__main__":
         help="Synthesize reproduction tests with a model (needs ANTHROPIC_API_KEY or OPENAI_API_KEY). "
              "Also settable with CERBERUS_USE_LLM_REPRO=1. Default is the offline scripted test.",
     )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        default=False,
+        help="Run the deterministic offline demo scenario regardless of the repository contents.",
+    )
 
     args = parser.parse_args()
     run_pipeline(
@@ -602,5 +701,6 @@ if __name__ == "__main__":
         mode=args.mode,
         use_llm=args.use_llm,
         use_llm_repro=args.use_llm_repro,
+        demo=args.demo,
     )
 

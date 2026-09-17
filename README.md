@@ -143,7 +143,7 @@ On Windows, `py -3` can be used instead of `python` when the Python launcher is 
 The default path uses a known, deterministic `calculate_rate` repair. It demonstrates the gates without spending money or requiring network access:
 
 ```bash
-python main.py --issue 101 \
+python main.py --demo --issue 101 \
   --title "Divide by zero in rate_calculator" \
   --body "calculate_rate(10, 0) throws ZeroDivisionError" \
   --mode local --dry-run

@@ -140,7 +140,7 @@ class LLMPatchGenerator:
         """
         if completion_fn is None and not has_api_key():
             raise PatchGenerationError(
-                "No ANTHROPIC_API_KEY or OPENAI_API_KEY is set, so no patch can be "
+                "No ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY is set, so no patch can be "
                 "generated. Set one, or use ScriptedPatchGenerator for offline runs."
             )
         self.sandbox = sandbox

@@ -120,6 +120,27 @@ def test_request_without_credentials_falls_back_instead_of_failing(
     assert "Falling back" in out
 
 
+def test_real_repo_without_llm_does_not_fall_back_to_demo_fix(
+    constructed, recorded_publishes, tmp_path, capsys
+):
+    (tmp_path / "service.py").write_text("def identity(value):\n    return value\n", encoding="utf-8")
+
+    admitted = main.run_pipeline(
+        repo_dir=str(tmp_path),
+        mode="local",
+        use_llm=True,
+        issue_number=202,
+        issue_title="identity should reject None",
+        issue_body="identity(None) should raise ValueError at service.py:1",
+    )
+    out = capsys.readouterr().out
+
+    assert admitted is False
+    assert constructed == []
+    assert "Real repositories require LLM patching" in out
+    assert "rate_calculator" not in out
+
+
 def test_enabled_run_drives_the_generator_and_reports_real_tokens(
     constructed, recorded_publishes, monkeypatch, tmp_path
 ):
@@ -202,3 +223,64 @@ def test_llm_repro_drives_synthesizer_when_enabled(tmp_path, monkeypatch, record
     )
     assert len(repro_calls) == 1
 
+
+
+def test_real_repo_with_mocked_llm_succeeds(
+    constructed, recorded_publishes, tmp_path, monkeypatch, capsys
+):
+    """Proves the real path works without relying on the demo or live LLM."""
+    (tmp_path / "rate_calculator.py").write_text(
+        "def calculate_rate(amount: float, total: float) -> float:\n"
+        '    """Calculate the rate as amount / total."""\n'
+        "    return amount / total\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_calc.py").write_text(
+        "from rate_calculator import calculate_rate\n"
+        "def test_ok(): assert calculate_rate(10, 2) == 5.0\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "requirements.txt").write_text("pytest\n", encoding="utf-8")
+
+    import subprocess
+    subprocess.run(["git", "init"], cwd=str(tmp_path), check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=str(tmp_path), check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(tmp_path), check=True)
+    subprocess.run(["git", "add", "-A"], cwd=str(tmp_path), check=True)
+    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=str(tmp_path), check=True)
+
+
+    monkeypatch.setattr(main, "has_api_key", lambda: True)
+
+    class _MockSynth:
+        def __init__(self, **kwargs):
+            self.sandbox = kwargs["sandbox"]
+            self.model = "mock-model"
+            self.usage = type("Usage", (), {"total_tokens": 150})()
+
+        def synthesize_and_verify(self, max_attempts=3):
+            test_code = (
+                "from rate_calculator import calculate_rate\n"
+                "def test_fail(): assert calculate_rate(10, 0) == 0.0\n"
+            )
+            repro_agent = main.ReproductionAgent(self.sandbox)
+            return repro_agent.run_reproduction_gate("Title", "Body", test_code)
+
+    monkeypatch.setattr(main, "LLMReproductionSynthesizer", _MockSynth)
+
+    admitted = main.run_pipeline(
+        repo_dir=str(tmp_path),
+        mode="local",
+        use_llm=True,
+        use_llm_repro=True,
+        issue_number=1,
+        issue_title="Divide by zero",
+        issue_body="calculate_rate(10, 0) throws ZeroDivisionError at rate_calculator.py:1",
+    )
+
+    out = capsys.readouterr().out
+    assert admitted is True
+    assert len(constructed) == 1
+    assert "Model-generated patches, boundary: rate_calculator.py" in out
+    assert "Generated and verified test_reproduce.py via model" in out

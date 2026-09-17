@@ -27,6 +27,8 @@ MAX_OUTPUT_CHARS = 500_000
 
 def _bound_output(text: str) -> str:
     """Bound output to MAX_OUTPUT_CHARS to prevent memory exhaustion."""
+    if text is None:
+        return ""
     if len(text) > MAX_OUTPUT_CHARS:
         return text[:MAX_OUTPUT_CHARS] + "\n[... output truncated at 500KB to prevent memory exhaustion ...]"
     return text
@@ -212,6 +214,8 @@ class Sandbox:
                     docker_cmd,
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=effective_timeout,
                 )
                 return ExecResult(
@@ -242,6 +246,8 @@ class Sandbox:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     env=merged_env,
                     start_new_session=(os.name != "nt"),
                 )

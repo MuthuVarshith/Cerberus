@@ -18,7 +18,11 @@ import hmac
 import json
 import logging
 import os
+import sys
 import tempfile
+import uuid
+import subprocess
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Set, List
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
@@ -29,8 +33,21 @@ from main import run_pipeline
 from agents.discovery_agent import DiscoveryAgent
 from harness.docker_sandbox import Sandbox
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+
 logger = logging.getLogger(__name__)
 app = FastAPI(title="Cerberus: Verification-First Autonomous Software Repair Service")
+
+# Serve the dashboard UI at /dashboard/
+_dashboard_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dashboard")
+if os.path.isdir(_dashboard_dir):
+    app.mount("/dashboard", StaticFiles(directory=_dashboard_dir, html=True), name="dashboard")
+
+@app.get("/", include_in_schema=False)
+def _root_redirect():
+    return RedirectResponse(url="/dashboard/")
+
 _processed_delivery_ids: Set[str] = set()
 SUPPORTED_EVENTS = {"issues", "issue_comment"}
 
@@ -408,7 +425,9 @@ def _execute_repair_task(run_id: str, req: RepairRequest):
                 dry_run=dry_run,
                 mode=exec_mode,
                 fork_owner=fork_owner,
-                run_id=run_id
+                run_id=run_id,
+                use_llm=True,
+                use_llm_repro=True
             )
         except Exception as e:
             logger.exception(f"Pipeline error for {run_id}: {e}")
@@ -569,7 +588,7 @@ def _run_all_repairs_sequential(req: ScanRequest, first_run_id: str):
             repo_url=req.repo_url,
             issue_id=issue["id"],
             issue_title=issue["summary"],
-            issue_body=issue["summary"],
+            issue_body=f"{issue['summary']} at {issue.get('file', 'unknown')}:{issue.get('line', 0)}",
             confirm=True
         )
         _execute_repair_task(run_id, repair_req)
