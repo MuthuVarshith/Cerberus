@@ -65,9 +65,24 @@ def test_comparison_separates_new_preexisting_and_missing():
     assert missing == ["t::c"]
 
 
-def test_non_pytest_commands_cannot_produce_evidence():
+def test_junit_command_planning():
     assert junit_test_command("tox -e py311", ".cerberus/r.xml") is None
-    assert junit_test_command("python -m pytest -q", ".cerberus/r.xml").endswith("--junitxml=.cerberus/r.xml")
+    cmd, report = junit_test_command("python -m pytest -q", ".cerberus/r.xml")
+    assert cmd.endswith("--junitxml=.cerberus/r.xml") and report == ".cerberus/r.xml"
+    cmd, report = junit_test_command("tox -e py -- --junitxml={junit_xml}", ".cerberus/r.xml")
+    assert cmd == "tox -e py -- --junitxml=.cerberus/r.xml" and report == ".cerberus/r.xml"
+    cmd, report = junit_test_command("make test", ".cerberus/r.xml", configured_report="build/junit.xml")
+    assert cmd == "make test" and report == "build/junit.xml"
+
+
+def test_excluded_tests_are_ignored_by_the_comparison(tmp_path):
+    from harness.docker_sandbox import Sandbox
+
+    with Sandbox() as sb:
+        sb.write_file("tests/test_mix.py", "def test_net():\n    assert False\n\ndef test_ok():\n    assert True\n")
+        agent = RegressionAgent(sb, timeout=120, exclude=["tests.test_mix::test_net"])
+        run = agent.run_suite(f"{sb.python_cmd} -m pytest -q tests", "excl.xml")
+        assert [c.test_id for c in run.report.cases] == ["tests.test_mix::test_ok"]
 
 
 def test_suite_with_unreadable_results_is_not_a_pass(tmp_path):

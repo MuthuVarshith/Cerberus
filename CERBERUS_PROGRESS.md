@@ -12,7 +12,7 @@ Branch: `cerberus/verification-gate` (one commit per phase; nothing pushed).
 | --- | --- |
 | 0 — Cleanup and truthful claims | Done |
 | 1 — Reliable gates and sandbox | Done |
-| 2 — Generalization (`.cerberus.yml`, patch-source interface, verify existing PR, JUnit XML) | Not started |
+| 2 — Generalization (`.cerberus.yml`, patch-source interface, verify existing change, JUnit XML) | Done (local; GitHub PR fetch + Check Run deferred to Phase 4) |
 | 3 — Repair quality | Not started |
 | 4 — GitHub App workflow | Not started |
 | 5 — Evaluation benchmark | Not started |
@@ -80,6 +80,30 @@ Branch: `cerberus/verification-gate` (one commit per phase; nothing pushed).
 - Removed dead code: `harness/tools.py` (ACI), `harness/context_manager.py`, `SANDBOX_NETWORK_DISABLED`.
 - Issue-referenced paths are confined to the workspace.
 
+## Phase 2 — completed
+
+- **`.cerberus.yml`** (`harness/repo_config.py`): `setup`, `test.command` / `test.report` / `{junit_xml}` placeholder,
+  `test.exclude` (fnmatch on JUnit IDs), `scope.allowed_paths` / `max_files` / `max_lines` /
+  `allow_test_modifications`, `budgets` (patch attempts, RED runs, GREEN runs, command timeout). `yaml.safe_load`,
+  strict validation (unknown keys, types, ranges, relative paths). Loaded from the base commit before any repository
+  code runs; invalid config → `ERROR`. Patches touching `.cerberus.yml` are rejected.
+- **Patch-source interface** (`agents/patch_sources.py`): `PatchSource.generate_patch(PatchRequest) -> diff`.
+  Adapters: `DiffPatchSource` (diff file, existing change, fixtures), `LLMPatchSource` (built-in generator),
+  `ExternalAgentPatchSource` (headless agent in a scratch export of the base commit; edits captured by a pure-Python
+  tree diff so git never runs on the agent's tree; binary/symlink changes refused). `claude-code` preset allows only
+  file tools.
+- **Verify an existing change:** `--base REF --head REF`. Workspace is cloned at base (`Sandbox(base_ref=...)`);
+  candidate is `git diff base head` from the user's repository (list args, no ext-diff/textconv). Scope defaults to
+  any file unless configured.
+- **Test-weakening detection:** the scope gate refuses modifications/deletions of existing test files unless
+  `allow_test_modifications: true`; new test files are allowed. The regression gate can't see an edited assertion.
+- **Language-agnostic regression gate:** any runner producing JUnit XML via `{junit_xml}` or `test.report`. RED/GREEN
+  and patch generation stay Python/pytest.
+- **Security fix:** `retrieval/lexical_search.py` no longer runs `git grep` on the host inside the workspace (the
+  workspace `.git` is untrusted after repository code runs); pure-Python search only.
+- CLI enforces exactly one patch source (`--patch`, `--base/--head`, `--agent`/`--agent-command`, `--use-llm`).
+- Dependency: `pyyaml>=6.0`.
+
 ## Architectural decisions
 
 - **Scripted inputs are caller inputs, not pipeline branches.** Demos and human patches use the same
@@ -92,6 +116,10 @@ Branch: `cerberus/verification-gate` (one commit per phase; nothing pushed).
   execute commands (e.g. `core.fsmonitor`), so all workspace git runs in the sandbox; host git touches only the source
   repo (clone) and the separate publishing clone.
 - **Base SHA, not HEAD.** Code in the sandbox can move `HEAD`; diffs and rollback use the recorded base commit.
+- **External agents are outside the sandbox.** They run on the host with their own credentials and permission model;
+  Cerberus sandboxes verification, not generation. Presets restrict tools where the agent supports it.
+- **Policy from the base commit.** `.cerberus.yml` is read before repository code runs and cannot be changed by the
+  patch under verification.
 - **Threat model:** Cerberus verifies patches to trusted-but-buggy repositories. Repository code runs inside the test
   process and could forge its own JUnit results; that is out of scope.
 - **Git:** work on a branch with one commit per phase.
@@ -103,10 +131,13 @@ Branch: `cerberus/verification-gate` (one commit per phase; nothing pushed).
   that it works.
 - POSIX bind-mount permissions (workspace made world-writable inside a 0700 temp root, `umask 0000` in container) are
   designed but unexercised on Linux.
-- Test command is always `python -m pytest -q`; no per-repo configuration yet (Phase 2 `.cerberus.yml`).
-- Scope boundary is the single localized file; localization quality is unmeasured.
-- The patch generator and verification gate are separated by a callable, but there is no formal patch-source
-  interface, external-agent adapter, or "verify an existing PR" mode yet (Phase 2).
+- Without `.cerberus.yml`, the test command is `python -m pytest -q` and the repair scope is the single localized
+  file; localization quality is unmeasured.
+- The external-agent adapter is tested only with a scripted stand-in; it has not been run with real Claude Code or
+  Codex (that consumes the user's account and needs explicit permission).
+- Verifying an existing change works on local git revisions; fetching a GitHub PR by number and reporting a Check Run
+  are Phase 4.
+- Test-file detection uses Python naming conventions (`tests/`, `test_*.py`, `*_test.py`, `conftest.py`).
 - RED relevance is heuristic; a test can pass every rule and still encode wrong behaviour.
 - Regression flake detection re-checks only suspected regressions, once, on the base code.
 - Webhook idempotency is in memory; webhook runs have no reproduction/patch source unless model modes are enabled.
@@ -121,3 +152,4 @@ Branch: `cerberus/verification-gate` (one commit per phase; nothing pushed).
 | 2026-09-17 | `python main.py --demo` without Docker | `ERROR` (fails closed), exit 1 |
 | 2026-09-17 | `python main.py --demo --unsafe-local-sandbox` | `ADMITTED`, exit 0 |
 | 2026-09-17 | `python evaluation/smoke_runner.py --unsafe-local-sandbox` | 2 admitted, 3 refused (RED_NOT_FAILING, REGRESSION, SCOPE_VIOLATION) as designed |
+| 2026-09-17 | Phase 2 full suite (`python -m pytest -q`, explicit host-unsafe sandbox, Docker mocked) | 190 passed |

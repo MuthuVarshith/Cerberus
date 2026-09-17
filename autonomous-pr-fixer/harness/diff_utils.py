@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from harness.docker_sandbox import HARNESS_DIR, Sandbox
+from harness.repo_config import CONFIG_FILENAME
 
 
 @dataclass
@@ -101,7 +102,8 @@ class DiffUtils:
 
     @staticmethod
     def forbidden_targets(diff_text: str) -> List[str]:
-        """Paths a candidate patch may never touch: harness files, git internals, escapes."""
+        """Paths a candidate patch may never touch: harness files, git internals, the
+        repository's verification policy (.cerberus.yml), and paths escaping the tree."""
         bad = []
         for line in diff_text.splitlines():
             if not (line.startswith("--- ") or line.startswith("+++ ") or line.startswith("diff --git ")):
@@ -116,6 +118,7 @@ class DiffUtils:
                     or _UNSAFE_PATH_RE.search(norm)
                     or norm == HARNESS_DIR or norm.startswith(f"{HARNESS_DIR}/")
                     or norm == ".git" or norm.startswith(".git/")
+                    or norm == CONFIG_FILENAME
                 ):
                     if path not in bad:
                         bad.append(path)

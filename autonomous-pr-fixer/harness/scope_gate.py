@@ -8,12 +8,14 @@ Measured against the base commit:
     line on both sides of the diff (Python `ast` spans); other file types report
     no symbol information rather than a guess
 
-Policy enforced: every changed file must be inside the allowed set, and the
-number of files and changed lines must be within limits. Symbols are recorded
-as evidence; they are not yet part of the policy.
+Policy enforced: existing test files may not be modified or deleted (unless the
+repository allows it), every changed file must be inside the allowed scope, and
+the number of files and changed lines must be within limits. Symbols are
+recorded as evidence; they are not part of the policy.
 """
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 from dataclasses import dataclass, field
@@ -90,6 +92,7 @@ class ScopeReport:
     new_files: List[str] = field(default_factory=list)
     deleted_files: List[str] = field(default_factory=list)
     unauthorized_files: List[str] = field(default_factory=list)
+    modified_test_files: List[str] = field(default_factory=list)
     lines_added: int = 0
     lines_deleted: int = 0
     changed_symbols: List[str] = field(default_factory=list)
@@ -109,6 +112,7 @@ class ScopeReport:
             "new_files": self.new_files,
             "deleted_files": self.deleted_files,
             "unauthorized_files": self.unauthorized_files,
+            "modified_test_files": self.modified_test_files,
             "lines_added": self.lines_added,
             "lines_deleted": self.lines_deleted,
             "changed_symbols": self.changed_symbols,
@@ -161,21 +165,51 @@ def _zero_context_diff(sandbox: Sandbox) -> str:
     return res.stdout if res.exit_code == 0 else ""
 
 
+def is_test_path(path: str) -> bool:
+    """Whether a repository path is part of the test suite (Python conventions)."""
+    norm = path.replace("\\", "/")
+    parts = norm.split("/")
+    name = parts[-1]
+    return (
+        any(p in ("tests", "test", "testing") for p in parts[:-1])
+        or name == "conftest.py"
+        or (name.startswith("test_") and name.endswith(".py"))
+        or name.endswith("_test.py")
+    )
+
+
+def _is_allowed(path: str, allowed_files: Sequence[str], allowed_patterns: Sequence[str]) -> bool:
+    return path in allowed_files or any(fnmatch.fnmatchcase(path, pattern) for pattern in allowed_patterns)
+
+
 def analyze_scope(
     sandbox: Sandbox,
     allowed_files: Sequence[str],
     max_files: int = 3,
     max_lines: int = 200,
     changes: Optional[WorkspaceChanges] = None,
+    allowed_patterns: Sequence[str] = (),
+    allow_test_modifications: bool = False,
 ) -> ScopeReport:
+    """Measure the change and apply the scope policy.
+
+    A file is in scope when it is one of `allowed_files` or matches a glob in
+    `allowed_patterns` (fnmatch semantics: `*` also matches `/`). Independently of
+    scope, modifying or deleting an *existing* test file is refused unless
+    `allow_test_modifications` is set: a patch that edits the tests it is judged
+    by can make the regression gate pass without fixing anything. New test files
+    are not affected by that rule.
+    """
     changes = changes or DiffUtils.workspace_changes(sandbox)
     allowed = sorted({f.replace("\\", "/") for f in allowed_files})
+    patterns = [p.replace("\\", "/") for p in allowed_patterns]
     report = ScopeReport(
-        allowed_files=allowed,
+        allowed_files=allowed + [f"pattern:{p}" for p in patterns],
         changed_files=list(changes.files),
         new_files=list(changes.new_files),
         deleted_files=list(changes.deleted_files),
-        unauthorized_files=[f for f in changes.files if f not in allowed],
+        unauthorized_files=[f for f in changes.files if not _is_allowed(f, allowed, patterns)],
+        modified_test_files=[f for f in changes.files if f not in changes.new_files and is_test_path(f)],
         lines_added=changes.lines_added,
         lines_deleted=changes.lines_deleted,
         diff_text=changes.diff_text,
@@ -190,7 +224,13 @@ def analyze_scope(
         f for f in changes.files if not f.endswith(".py") and f not in report.symbols_unavailable
     )
 
-    if report.unauthorized_files:
+    if report.modified_test_files and not allow_test_modifications:
+        report.is_acceptable = False
+        report.violation_reason = (
+            f"Existing test files were modified or deleted: {', '.join(report.modified_test_files)} "
+            "(set scope.allow_test_modifications in .cerberus.yml to permit this)"
+        )
+    elif report.unauthorized_files:
         report.is_acceptable = False
         report.violation_reason = f"Files changed outside the allowed scope: {', '.join(report.unauthorized_files)}"
     elif len(changes.files) > max_files:

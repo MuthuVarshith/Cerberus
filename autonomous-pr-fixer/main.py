@@ -15,6 +15,8 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shlex
+import subprocess
 import sys
 import tempfile
 import uuid
@@ -28,6 +30,7 @@ from harness.admission_controller import AdmissionController, AdmissionDecision
 from harness.pipeline_state import PipelineState, PipelineStateMachine, RefusalCode
 from harness.config import load_config
 from harness.logger import log_event
+from harness.repo_config import RepoConfig, RepoConfigError, load_repo_config
 from harness.run_artifact import write_run_artifact
 from harness.scope_gate import ScopeReport, analyze_scope
 from agents.triage_agent import TriageAgent
@@ -36,14 +39,21 @@ from agents.localization_agent import LocalizationAgent
 from agents.patch_agent import PatchAgent, PatchLoopResult
 from agents.regression_agent import RegressionAgent, RegressionReport
 from agents.repo_setup_agent import RepoSetupAgent
-from agents.llm_patch_generator import LLMPatchGenerator, ScriptedPatchGenerator, has_api_key
+from agents.llm_patch_generator import LLMPatchGenerator, has_api_key
 from agents.llm_reproduction_synthesizer import LLMReproductionSynthesizer
+from agents.patch_sources import (
+    CLAUDE_CODE_PRESET,
+    DiffPatchSource,
+    ExternalAgentPatchSource,
+    LLMPatchSource,
+    PatchRequest,
+    PatchSource,
+    PatchSourceError,
+    generator_for,
+)
 from github.pr_publisher import PRPublisher
 
 PatchGenerator = Callable[[int, str], str]
-
-MAX_SCOPE_FILES = 3
-GREEN_VERIFICATION_RUNS = 3
 
 
 def _parse_referenced_file(issue_body: str, workspace_dir: str) -> Optional[str]:
@@ -98,6 +108,8 @@ class _RunRecorder:
         self.pr_info: Dict[str, Any] = {}
         self.github_enabled = False
         self.refusal: Dict[str, Any] = {}
+        self.repo_config: Optional[RepoConfig] = None
+        self.patch_source: Dict[str, Any] = {}
         self.artifact_path: Optional[str] = None
         self.written = False
 
@@ -169,6 +181,8 @@ class _RunRecorder:
                     else None
                 ),
                 "baseline": self.baseline_info or None,
+                "repo_config": self.repo_config.to_dict() if self.repo_config else None,
+                "patch_source": self.patch_source or None,
             },
         )
         self.written = True
@@ -188,6 +202,9 @@ def run_pipeline(
     repro_test_code: Optional[str] = None,
     patch_generator: Optional[PatchGenerator] = None,
     sandbox_isolation: Optional[str] = None,
+    patch_source: Optional[PatchSource] = None,
+    base_ref: Optional[str] = None,
+    verify_change: bool = False,
 ) -> bool:
     """Run the verification pipeline for one issue. Returns True only when admitted.
 
@@ -195,6 +212,10 @@ def run_pipeline(
         repro_test_code: a caller-supplied reproduction test, held to the RED gate.
         patch_generator: a caller-supplied `(attempt, feedback) -> diff` callable.
         sandbox_isolation: "docker" (default) or "host-unsafe" (trusted fixtures only).
+        patch_source: a PatchSource (pre-written diff, model, or external agent).
+        base_ref: the commit to verify against; defaults to the repository's HEAD.
+        verify_change: the patch is an existing change (e.g. a PR) rather than a
+            repair; scope then defaults to any file unless .cerberus.yml restricts it.
     """
     run_id = run_id or f"run_{uuid.uuid4().hex[:10]}"
     cfg = load_config()
@@ -217,7 +238,7 @@ def run_pipeline(
 
     try:
         try:
-            sb = Sandbox(base_dir=repo_dir, timeout_sec=cfg.sandbox_timeout_seconds, isolation=isolation)
+            sb = Sandbox(base_dir=repo_dir, timeout_sec=cfg.sandbox_timeout_seconds, isolation=isolation, base_ref=base_ref)
         except SandboxError as exc:
             return rec.error("SANDBOX", str(exc))
         with sb:
@@ -226,10 +247,19 @@ def run_pipeline(
                 "image": sb.image if sb.is_docker else None,
                 "source_dirty": sb.source_dirty,
             })
-            return _run_in_sandbox(
-                sb, rec, cfg, repo_dir, issue_number, issue_title, issue_body, dry_run, mode,
-                use_llm, use_llm_repro, fork_owner, repro_test_code, patch_generator,
-            )
+            # Policy is read from the base commit before any repository code runs,
+            # so a patch cannot loosen the rules it is judged by.
+            try:
+                rec.repo_config = load_repo_config(sb.workspace_dir)
+            except RepoConfigError as exc:
+                return rec.error("CONFIG", str(exc))
+            try:
+                return _run_in_sandbox(
+                    sb, rec, cfg, rec.repo_config, repo_dir, issue_number, issue_title, issue_body, dry_run, mode,
+                    use_llm, use_llm_repro, fork_owner, repro_test_code, patch_generator, patch_source, verify_change,
+                )
+            except PatchSourceError as exc:
+                return rec.error("PATCH_SOURCE", str(exc))
     except Exception as exc:
         if not rec.sm.is_terminal:
             rec.sm.transition(PipelineState.ERROR)
@@ -248,6 +278,7 @@ def _run_in_sandbox(
     sb: Sandbox,
     rec: _RunRecorder,
     cfg: Any,
+    repo_cfg: RepoConfig,
     repo_dir: str,
     issue_number: int,
     issue_title: str,
@@ -259,9 +290,14 @@ def _run_in_sandbox(
     fork_owner: Optional[str],
     repro_test_code: Optional[str],
     patch_generator: Optional[PatchGenerator],
+    patch_source: Optional[PatchSource],
+    verify_change: bool,
 ) -> bool:
     sm = rec.sm
     run_id = rec.run_id
+    budgets = repo_cfg.budgets
+    if repo_cfg.present:
+        print("  [OK] Using .cerberus.yml from the base commit")
 
     if sb.source_dirty:
         print("  [WARN] The source repository has uncommitted changes; only the committed HEAD is verified.")
@@ -283,14 +319,16 @@ def _run_in_sandbox(
     print("\n[2/9] SETUP")
     sm.transition(PipelineState.SETUP_PENDING)
     setup_plan = RepoSetupAgent(sb).detect()
-    print(f"  [OK] {setup_plan.reason}")
-    for cmd in setup_plan.install_commands:
+    install_commands = repo_cfg.setup if repo_cfg.setup is not None else setup_plan.install_commands
+    test_command = repo_cfg.test_command or setup_plan.test_command
+    print(f"  [OK] {'.cerberus.yml' if repo_cfg.setup is not None or repo_cfg.test_command else setup_plan.reason}")
+    for cmd in install_commands:
         print(f"  -> {cmd}")
-    results = sb.run_setup(setup_plan.install_commands, timeout=max(cfg.sandbox_timeout_seconds, 600))
+    results = sb.run_setup(install_commands, timeout=budgets.command_timeout_seconds)
     failed = [r for r in results if r.exit_code != 0]
     if failed:
         return rec.error("SETUP", f"Dependency installation failed: {failed[0].output[-1000:]}")
-    rec.sandbox_info["setup_commands"] = setup_plan.install_commands
+    rec.sandbox_info["setup_commands"] = install_commands
     rec.sandbox_info["setup_skipped"] = sb.setup_skipped
     if sb.setup_skipped:
         print("  [WARN] host-unsafe sandbox: dependency installation skipped")
@@ -299,7 +337,10 @@ def _run_in_sandbox(
     # REPRODUCTION + RED
     print("\n[3/9] REPRODUCTION / RED GATE")
     sm.transition(PipelineState.REPRODUCTION_PENDING)
-    repro_agent = ReproductionAgent(sb, error_signatures=triage_report.error_signatures)
+    repro_agent = ReproductionAgent(
+        sb, error_signatures=triage_report.error_signatures,
+        runs=budgets.red_runs, timeout=budgets.command_timeout_seconds,
+    )
     repro_tokens = 0
     if repro_test_code:
         print("  -> Using caller-supplied reproduction test")
@@ -340,14 +381,18 @@ def _run_in_sandbox(
     # BASELINE
     print("\n[4/9] BASELINE")
     sm.transition(PipelineState.BASELINE_PENDING)
-    if not setup_plan.test_command:
+    if not test_command:
         return rec.refuse(RefusalCode.NO_TEST_COMMAND, "BASELINE", "No test command was detected for this repository.")
-    regr_agent = RegressionAgent(sb)
-    baseline = regr_agent.record_baseline(setup_plan.test_command)
+    regr_agent = RegressionAgent(
+        sb, timeout=budgets.command_timeout_seconds,
+        exclude=repo_cfg.test_exclude, configured_report=repo_cfg.test_report,
+    )
+    baseline = regr_agent.record_baseline(test_command)
     if baseline.report is None:
         return rec.refuse(RefusalCode.BASELINE_UNVERIFIABLE, "BASELINE", f"Baseline test results are unusable: {baseline.error}")
     rec.baseline_info = {
-        "test_command": setup_plan.test_command,
+        "test_command": test_command,
+        "excluded_patterns": repo_cfg.test_exclude,
         "total": baseline.report.total,
         "failing": baseline.report.ids_with("failed", "error"),
     }
@@ -367,36 +412,55 @@ def _run_in_sandbox(
     top_matches = [c for c in loc_res.candidates if target_code_file and target_code_file in c.file]
     top_cand = top_matches[0] if top_matches else (loc_res.candidates[0] if loc_res.candidates else None)
     top_file = top_cand.file if top_cand else target_code_file
-    if not top_file:
+    allowed_patterns = list(repo_cfg.scope.allowed_paths) or (["*"] if verify_change else [])
+    allowed_files = [top_file] if top_file and not verify_change else []
+    if not allowed_files and not allowed_patterns:
         return rec.refuse(RefusalCode.NOT_LOCALIZED, "LOCALIZATION", "Could not localize a repair target file.")
     sm.transition(PipelineState.LOCALIZED)
-    print(f"  [OK] Allowed scope: {top_file}")
+    print(f"  [OK] Allowed scope: {', '.join(allowed_files + [f'pattern {p}' for p in allowed_patterns])}")
 
     # PATCH LOOP + GREEN
     print("\n[6/9] PATCH LOOP / GREEN GATE")
     sm.transition(PipelineState.PATCH_PENDING)
     generator: Optional[PatchGenerator] = patch_generator
     llm_generator: Optional[LLMPatchGenerator] = None
+    request = PatchRequest(
+        attempt=1, feedback="", issue_number=issue_number, issue_title=issue_title, issue_body=issue_body,
+        allowed_files=allowed_files, allowed_patterns=allowed_patterns,
+        reproduction_test_code=rec.repro_res.test_code, source_repo_dir=repo_dir, base_commit=rec.base_commit_sha,
+    )
     if generator is not None:
+        rec.patch_source = {"name": "caller-supplied generator"}
         print("  -> Using caller-supplied patch generator")
+    elif patch_source is not None:
+        generator = generator_for(patch_source, request)
+        rec.patch_source = {"name": patch_source.name}
+        print(f"  -> Patch source: {patch_source.name}")
     elif _llm_patching_enabled(use_llm):
         if not has_api_key():
             return rec.refuse(
                 RefusalCode.NO_PATCH_SOURCE, "PATCH_LOOP",
                 "Model patching was requested but no ANTHROPIC_API_KEY/OPENAI_API_KEY/GEMINI_API_KEY is set.",
             )
+        if not top_file:
+            return rec.refuse(RefusalCode.NOT_LOCALIZED, "PATCH_LOOP", "Model patching needs a localized file to show the model.")
         llm_generator = LLMPatchGenerator(sandbox=sb, candidate_files=[top_file], issue_title=issue_title, issue_body=issue_body)
-        generator = llm_generator
+        source = LLMPatchSource(llm_generator)
+        generator = generator_for(source, request)
+        rec.patch_source = {"name": source.name}
         print(f"  -> Model-generated patches, boundary: {top_file} (model {llm_generator.model})")
     else:
         return rec.refuse(
             RefusalCode.NO_PATCH_SOURCE, "PATCH_LOOP",
-            "No patch source is configured: supply a patch (--patch) or enable model patching (--use-llm).",
+            "No patch source is configured: supply a patch (--patch), a change (--base/--head), "
+            "an external agent (--agent), or enable model patching (--use-llm).",
         )
 
-    loop_res = PatchAgent(sb, max_lines_changed=cfg.patch_max_lines_changed).run_patch_loop(
-        [top_file], generator, verifier=repro_agent.green_verifier(rec.repro_res),
-    )
+    loop_res = PatchAgent(
+        sb, max_attempts=budgets.patch_attempts, max_lines_changed=repo_cfg.scope.max_lines,
+    ).run_patch_loop(allowed_files, generator, verifier=repro_agent.green_verifier(rec.repro_res))
+    if patch_source is not None and getattr(patch_source, "transcripts", None):
+        rec.patch_source["transcripts"] = patch_source.transcripts
     print(f"  -> {loop_res.total_attempts} attempt(s)")
     token_usage: Optional[Dict[str, int]] = None
     if llm_generator is not None:
@@ -426,17 +490,17 @@ def _run_in_sandbox(
             RefusalCode.GREEN_NOT_REACHED, "PATCH_LOOP",
             f"No candidate patch made the reproduction test pass after {loop_res.total_attempts} attempt(s).",
         )
-    green = repro_agent.verify_green(rec.repro_res, runs=GREEN_VERIFICATION_RUNS)
+    green = repro_agent.verify_green(rec.repro_res, runs=budgets.green_runs)
     if not green.passed:
         rec.patch_res.reached_green = False
         return rec.refuse(RefusalCode(green.refusal_code), "GREEN_GATE", green.message)
     sm.transition(PipelineState.PATCH_GREEN)
-    print(f"  [OK] GREEN confirmed in {GREEN_VERIFICATION_RUNS}/{GREEN_VERIFICATION_RUNS} runs")
+    print(f"  [OK] GREEN confirmed in {budgets.green_runs}/{budgets.green_runs} runs")
 
     # REGRESSION
     print("\n[7/9] REGRESSION")
     sm.transition(PipelineState.REGRESSION_PENDING)
-    rec.regr_res = regr_agent.run_regression_suite(setup_plan.test_command, baseline.report)
+    rec.regr_res = regr_agent.run_regression_suite(test_command, baseline.report)
     r = rec.regr_res
     if not r.results_parsed:
         return rec.refuse(RefusalCode.REGRESSION_UNVERIFIABLE, "REGRESSION", f"Test results after the patch are unusable: {r.error_message}")
@@ -451,7 +515,13 @@ def _run_in_sandbox(
     print("\n[8/9] SCOPE")
     sm.transition(PipelineState.SCOPE_PENDING)
     rec.scope_res = analyze_scope(
-        sb, allowed_files=[top_file], max_files=MAX_SCOPE_FILES, max_lines=cfg.patch_max_lines_changed, changes=changes,
+        sb,
+        allowed_files=allowed_files,
+        allowed_patterns=allowed_patterns,
+        max_files=repo_cfg.scope.max_files,
+        max_lines=repo_cfg.scope.max_lines,
+        allow_test_modifications=repo_cfg.scope.allow_test_modifications,
+        changes=changes,
     )
     s = rec.scope_res
     print(f"  -> files {s.changed_files} (+{s.lines_added}/-{s.lines_deleted}); symbols {s.changed_symbols or 'none identified'}")
@@ -553,6 +623,31 @@ def _read_text(path: str) -> str:
         return f.read()
 
 
+def resolve_change(repo_dir: str, base: str, head: str) -> tuple[str, str, str]:
+    """Return (base_sha, head_sha, diff) for an existing change in the source repository.
+
+    Runs git on the user's own repository only, with list arguments and with
+    external diff drivers and textconv disabled.
+    """
+    def _git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", *args], cwd=repo_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+    shas = []
+    for ref in (base, head):
+        if ref.startswith("-"):
+            raise ValueError(f"Invalid revision {ref!r}.")
+        res = _git("rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}")
+        if res.returncode != 0:
+            raise ValueError(f"{ref!r} does not name a commit in {repo_dir}.")
+        shas.append(res.stdout.strip())
+    diff = _git("-c", "core.autocrlf=false", "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", shas[0], shas[1])
+    if diff.returncode != 0:
+        raise ValueError(f"git diff failed: {diff.stderr.strip()}")
+    if not diff.stdout.strip():
+        raise ValueError(f"{base}..{head} contains no changes.")
+    return shas[0], shas[1], diff.stdout
+
+
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Cerberus: verification gate for bug-fix patches")
     parser.add_argument("--repo", default=".", help="Path to a local git repository")
@@ -564,6 +659,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", default=False, help="Do not push or open a PR")
     parser.add_argument("--repro-test", metavar="PATH", help="Reproduction test file to hold to the RED gate")
     parser.add_argument("--patch", metavar="PATH", help="Unified diff to verify as the candidate patch")
+    parser.add_argument("--base", metavar="REF", help="Verify an existing change: base revision (use with --head)")
+    parser.add_argument("--head", metavar="REF", help="Verify an existing change: head revision, e.g. a PR branch")
+    parser.add_argument("--agent", choices=["claude-code"],
+                        help="Use an external coding agent preset as the patch source (runs on the host, outside the sandbox)")
+    parser.add_argument("--agent-command", metavar="CMD",
+                        help="External agent command; the prompt is sent on stdin, {prompt_file} and {workdir} are substituted")
+    parser.add_argument("--agent-timeout", type=int, default=1800, help="Seconds allowed per external agent attempt")
     parser.add_argument("--use-llm", action="store_true", default=None,
                         help="Generate patches with a model (needs a provider API key). Also CERBERUS_USE_LLM=1.")
     parser.add_argument("--use-llm-repro", action="store_true", default=None,
@@ -593,7 +695,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 dry_run=True,
                 mode="local",
                 repro_test_code=scenario.repro_test_code,
-                patch_generator=ScriptedPatchGenerator([scenario.patch_diff]),
+                patch_source=DiffPatchSource([scenario.patch_diff], name="demo fixture diff"),
                 sandbox_isolation=isolation,
             )
         return 0 if admitted else 1
@@ -601,6 +703,32 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not args.title:
         print("[ERROR] --title is required (or use --demo).")
         return 2
+
+    chosen = [flag for flag, value in (
+        ("--patch", args.patch), ("--head", args.head), ("--agent", args.agent),
+        ("--agent-command", args.agent_command), ("--use-llm", args.use_llm),
+    ) if value]
+    if len(chosen) > 1:
+        print(f"[ERROR] Choose one patch source; got {', '.join(chosen)}.")
+        return 2
+    if bool(args.base) != bool(args.head):
+        print("[ERROR] --base and --head must be used together.")
+        return 2
+
+    patch_source: Optional[PatchSource] = None
+    base_ref: Optional[str] = None
+    if args.patch:
+        patch_source = DiffPatchSource([_read_text(args.patch)], name=f"diff file {os.path.basename(args.patch)}")
+    elif args.head:
+        try:
+            base_ref, head_sha, diff = resolve_change(args.repo, args.base, args.head)
+        except ValueError as exc:
+            print(f"[ERROR] {exc}")
+            return 2
+        patch_source = DiffPatchSource([diff], name=f"change {base_ref[:12]}..{head_sha[:12]}")
+    elif args.agent or args.agent_command:
+        command = CLAUDE_CODE_PRESET if args.agent == "claude-code" else shlex.split(args.agent_command)
+        patch_source = ExternalAgentPatchSource(command, name=args.agent or command[0], timeout=args.agent_timeout)
 
     admitted = run_pipeline(
         repo_dir=args.repo,
@@ -612,8 +740,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         use_llm=args.use_llm,
         use_llm_repro=args.use_llm_repro,
         repro_test_code=_read_text(args.repro_test) if args.repro_test else None,
-        patch_generator=ScriptedPatchGenerator([_read_text(args.patch)]) if args.patch else None,
+        patch_source=patch_source,
         sandbox_isolation=isolation,
+        base_ref=base_ref,
+        verify_change=bool(args.head),
     )
     return 0 if admitted else 1
 

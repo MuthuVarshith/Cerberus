@@ -179,6 +179,7 @@ class Sandbox:
         memory: str = "2g",
         cpus: str = "2",
         pids_limit: int = 256,
+        base_ref: Optional[str] = None,
     ):
         self.isolation = resolve_isolation(isolation)
         self.image = image or os.environ.get("CERBERUS_SANDBOX_IMAGE", "") or DEFAULT_IMAGE
@@ -211,7 +212,7 @@ class Sandbox:
         self.workspace_dir = os.path.join(self._root_dir, "ws")
         try:
             if base_dir is not None:
-                self._clone_source(base_dir)
+                self._clone_source(base_dir, base_ref)
             else:
                 os.makedirs(self.workspace_dir)
         except Exception:
@@ -230,18 +231,23 @@ class Sandbox:
         """Interpreter token valid for commands executed inside this sandbox."""
         return CONTAINER_PYTHON if self.is_docker else HOST_PYTHON
 
-    def _clone_source(self, base_dir: str) -> None:
+    def _clone_source(self, base_dir: str, base_ref: Optional[str] = None) -> None:
         if not os.path.isdir(base_dir):
             raise WorkspaceError(f"Repository path does not exist: {base_dir}")
-        head = _run_host_git(["rev-parse", "--verify", "HEAD"], cwd=base_dir)
+        ref = base_ref or "HEAD"
+        if ref.startswith("-"):
+            raise WorkspaceError(f"Invalid base revision {ref!r}.")
+        head = _run_host_git(["rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}"], cwd=base_dir)
         if head.returncode != 0:
+            if base_ref:
+                raise WorkspaceError(f"Base revision {base_ref!r} does not name a commit in {base_dir}.")
             raise WorkspaceError(
                 f"{base_dir} is not a git repository with at least one commit; "
                 "there is no base revision to verify against."
             )
         self.base_commit = head.stdout.strip()
         status = _run_host_git(["status", "--porcelain"], cwd=base_dir)
-        self.source_dirty = bool(status.stdout.strip())
+        self.source_dirty = base_ref is None and bool(status.stdout.strip())
 
         # core.autocrlf=false before checkout: host git and container git must see
         # identical bytes, or every line reads as modified.

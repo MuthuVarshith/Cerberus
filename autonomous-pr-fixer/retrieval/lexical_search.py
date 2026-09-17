@@ -1,13 +1,13 @@
-﻿"""
-Lexical Search Layer.
-Provides fast keyword, regex, and symbol matching across repository files
-using ripgrep (where available) with robust pure-Python regex fallback.
+"""
+Lexical search layer: literal keyword matching across repository files.
+
+Implemented in pure Python on purpose. It reads files from the workspace but
+never executes git or any other program there.
 """
 from __future__ import annotations
 
 import os
 import re
-import subprocess
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -38,44 +38,8 @@ class LexicalSearch:
         if not query or not query.strip():
             return results
 
-        # Try git grep first
-        flags = "-n" if case_sensitive else "-n -i"
-        cmd = f"git grep {flags} -- \"{query}\""
-        try:
-            proc = subprocess.run(
-                cmd,
-                cwd=self.workspace_dir,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if proc.returncode == 0 and proc.stdout.strip():
-                for line in proc.stdout.strip().splitlines():
-                    parts = line.split(":", 2)
-                    if len(parts) >= 3:
-                        fpath = parts[0].replace("\\", "/")
-                        if not fpath.endswith(file_extension):
-                            continue
-                        try:
-                            lineno = int(parts[1])
-                        except ValueError:
-                            lineno = 1
-                        results.append(
-                            SearchMatch(
-                                file_path=fpath,
-                                line_number=lineno,
-                                line_content=parts[2].strip(),
-                            )
-                        )
-                        if len(results) >= max_matches:
-                            return results
-                if results:
-                    return results
-        except Exception:
-            pass
-
-        # Python fallback directory scan
+        # Pure-Python scan. No git: after repository code has run in the sandbox,
+        # the workspace's .git directory is untrusted and must not drive host git.
         flags_re = 0 if case_sensitive else re.IGNORECASE
         pattern = re.compile(re.escape(query), flags_re)
 

@@ -19,7 +19,7 @@ allowed scope. If any check cannot be satisfied or cannot be verified, the run i
 | **Baseline** | The repository's pytest command produces a readable JUnit report on the unpatched commit. | test count, already-failing test IDs |
 | **GREEN** | With the patch, the unmodified reproduction test passes in 3 of 3 runs, with no failures, errors or skips. A modified reproduction test is refused. | attempts, per-attempt failures |
 | **Regression** | No test that passed at baseline now fails, errors, or stops running. Failures that already existed at baseline are reported, not counted. Suspected regressions are re-run on the base code; tests that fail there too are reported as flaky. Unreadable results are refused, never passed. | newly failing, pre-existing, flaky |
-| **Scope** | Every changed file — including newly created and deleted files — is inside the allowed scope (the localized file), at most 3 files and 200 changed lines. | files, new/deleted files, lines, changed Python functions/classes |
+| **Scope** | No existing test file is modified or deleted (unless the repository allows it); every changed file — including newly created and deleted files — is inside the allowed scope (the localized file, or `.cerberus.yml` globs); at most 3 files and 200 changed lines by default. | files, new/deleted files, modified test files, lines, changed Python functions/classes |
 | **Admission** | GREEN, regression, scope, and a non-whitespace change against the base commit all hold. | decision and reasons |
 
 Every run ends in exactly one terminal state — `ADMITTED`, `REFUSED` (with a refusal code such as `RED_WRONG_REASON`
@@ -79,7 +79,36 @@ python main.py --repo /path/to/git/repo \
   --patch path/to/fix.diff
 ```
 
-### Model-generated tests or patches (optional)
+### Verify an existing change (for example a pull request branch)
+
+```bash
+python main.py --repo /path/to/git/repo \
+  --title "parse_date fails on leap years" --body "..." \
+  --repro-test path/to/test_reproduce.py \
+  --base main --head fix-branch
+```
+
+The workspace is the `--base` commit and the candidate patch is `git diff base head`. With no `.cerberus.yml` scope,
+any file may change (within file/line limits), but modifying or deleting existing tests is refused.
+
+### Patch sources
+
+The gate does not care where a patch comes from. Exactly one source is used per run:
+
+| Source | Flag | Notes |
+| --- | --- | --- |
+| Diff file | `--patch fix.diff` | human-authored or produced elsewhere |
+| Existing change | `--base REF --head REF` | e.g. a PR branch |
+| External coding agent | `--agent claude-code` or `--agent-command "..."` | runs headless in a scratch copy of the base commit; its edits are captured as a diff without running git on the agent's tree |
+| Built-in model generator | `--use-llm` | single-prompt unified diff via `litellm` |
+
+External agents run **on the host, outside Cerberus's sandbox**, under their own permission model and credentials;
+Cerberus sandboxes the verification of what they produce. The `claude-code` preset allows only file tools
+(`Read,Edit,Write,Glob,Grep`), no shell. The prompt is sent on stdin; `{prompt_file}` and `{workdir}` are substituted in
+`--agent-command`. The external agent path is tested with a scripted stand-in agent; it has not been run against a real
+Claude Code or Codex session in this repository.
+
+### Model-generated reproduction tests (optional)
 
 ```bash
 export ANTHROPIC_API_KEY=...        # or OPENAI_API_KEY / GEMINI_API_KEY
@@ -88,6 +117,36 @@ python main.py --repo /path/to/repo --title "..." --body "... at path/to/file.py
 
 Model modes are off unless requested; requested without a key, the run is refused. Model output is held to the same
 gates.
+
+## Per-repository configuration: `.cerberus.yml`
+
+Optional, at the repository root, read from the **base** commit before any repository code runs. A patch that edits it
+is refused. Unknown keys and invalid values end the run in `ERROR`.
+
+```yaml
+version: 1
+setup:                                  # replaces detected install commands (runs in the networked setup phase)
+  - python -m pip install -e ".[test]"
+test:
+  command: python -m pytest -q          # pytest commands get --junitxml appended
+  # command: tox -e py311 -- --junitxml={junit_xml}   # or use the placeholder
+  # report: build/junit.xml                            # or read a report the command writes itself
+  exclude:                              # JUnit test IDs (fnmatch) ignored by baseline and regression
+    - "tests.test_network::*"
+scope:
+  allowed_paths: ["src/*"]              # fnmatch globs; default is the localized file
+  max_files: 3
+  max_lines: 200
+  allow_test_modifications: false
+budgets:
+  patch_attempts: 5
+  red_runs: 3
+  green_runs: 3
+  command_timeout_seconds: 600
+```
+
+The regression gate accepts any test runner that writes JUnit XML (via `{junit_xml}` or `report`). The RED/GREEN gates
+and patch generation remain Python/pytest-only.
 
 ## Publishing
 
@@ -138,10 +197,13 @@ benchmark of repair ability, and Cerberus has no benchmark results yet.
 
 ## Known limitations
 
-- **Python and pytest only.** The regression and RED gates need pytest JUnit output; `tox`/`nox`-only suites are
-  refused as unverifiable.
-- **Dependency detection** covers `pyproject.toml`/`setup.py` (with `test`/`dev` extras), `requirements*.txt`; no
-  Poetry/uv/pipenv lock-file installs, private indexes, or services such as databases.
+- **Python and pytest for RED/GREEN.** The regression gate needs JUnit XML: pytest commands get it automatically; other
+  runners need `{junit_xml}` or `test.report` in `.cerberus.yml`, otherwise they are refused as unverifiable. The
+  sandbox image contains only Python, git and pytest.
+- **Dependency detection** covers `pyproject.toml`/`setup.py` (with `test`/`dev` extras), `requirements*.txt`;
+  anything else needs `setup:` in `.cerberus.yml`. No private indexes or services such as databases.
+- **Existing-change verification is local:** `--base/--head` take git revisions; fetching a GitHub PR by number and
+  posting a Check Run are not implemented yet.
 - **The RED gate's relevance check is heuristic** (imports and identifiers written as code in the issue). A test can
   satisfy every rule and still encode the wrong expected behaviour; that needs human review.
 - **Passing gates is not proof of correctness.** Tests only cover what they cover.
@@ -155,8 +217,8 @@ benchmark of repair ability, and Cerberus has no benchmark results yet.
 ```text
 autonomous-pr-fixer/
 ├── main.py          CLI and pipeline orchestration
-├── agents/          triage, reproduction (RED/GREEN), localization, patch loop, regression, repo setup, model generators
-├── harness/         sandbox, JUnit parsing, scope gate, admission, state machine, diff utilities, run artifacts, config
+├── agents/          triage, reproduction (RED/GREEN), localization, patch loop, patch sources, regression, repo setup, model generators
+├── harness/         sandbox, JUnit parsing, scope gate, admission, state machine, diff utilities, .cerberus.yml, run artifacts, config
 ├── retrieval/       Python AST index and lexical search
 ├── github/          webhook handler and PR publisher
 ├── sandbox/         Dockerfile for the sandbox image

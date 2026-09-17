@@ -16,10 +16,11 @@ as JUnit XML produces no evidence, and no evidence is never a pass.
 """
 from __future__ import annotations
 
+import fnmatch
 import os
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from harness.docker_sandbox import HARNESS_DIR, ExecResult, Sandbox
 from harness.junit import ERROR, FAILED, PASSED, JUnitReportError, TestReport, read_junit_report
@@ -27,11 +28,29 @@ from harness.junit import ERROR, FAILED, PASSED, JUnitReportError, TestReport, r
 _FAILING = (FAILED, ERROR)
 
 
-def junit_test_command(test_command: str, report_rel_path: str) -> Optional[str]:
-    """Add JUnit reporting to a pytest-based command, or None when that is not possible."""
-    if "pytest" not in test_command:
-        return None
-    return f"{test_command} -p no:cacheprovider --junitxml={report_rel_path}"
+JUNIT_PLACEHOLDER = "{junit_xml}"
+
+
+def junit_test_command(test_command: str, report_rel_path: str, configured_report: Optional[str] = None) -> Optional[Tuple[str, str]]:
+    """Return (command, report path) for a run that yields JUnit XML, or None if it cannot.
+
+    - A command containing {junit_xml} gets the harness report path substituted.
+    - A configured report path is read after running the command unchanged.
+    - A pytest command gets --junitxml appended.
+    """
+    if JUNIT_PLACEHOLDER in test_command:
+        return test_command.replace(JUNIT_PLACEHOLDER, report_rel_path), report_rel_path
+    if configured_report:
+        return test_command, configured_report
+    if "pytest" in test_command:
+        return f"{test_command} -p no:cacheprovider --junitxml={report_rel_path}", report_rel_path
+    return None
+
+
+def _without_excluded(report: TestReport, patterns: Sequence[str]) -> TestReport:
+    if not patterns:
+        return report
+    return TestReport([c for c in report.cases if not any(fnmatch.fnmatchcase(c.test_id, p) for p in patterns)])
 
 
 @dataclass
@@ -88,25 +107,37 @@ class RegressionReport:
 class RegressionAgent:
     """Runs the repository test suite before and after a patch and compares results."""
 
-    def __init__(self, sandbox: Sandbox, timeout: int = 900):
+    def __init__(
+        self,
+        sandbox: Sandbox,
+        timeout: int = 900,
+        exclude: Sequence[str] = (),
+        configured_report: Optional[str] = None,
+    ):
         self.sandbox = sandbox
         self.timeout = timeout
+        self.exclude = list(exclude)
+        self.configured_report = configured_report
 
     def run_suite(self, test_command: str, report_name: str) -> TestRun:
         self.sandbox.ensure_harness_dir()
-        report_rel = f"{HARNESS_DIR}/{report_name}"
-        cmd = junit_test_command(test_command, report_rel)
-        if cmd is None:
+        planned = junit_test_command(test_command, f"{HARNESS_DIR}/{report_name}", self.configured_report)
+        if planned is None:
             empty = ExecResult(exit_code=-1, stdout="", stderr="", duration_sec=0.0)
-            return TestRun(None, empty, f"cannot collect JUnit results from test command {test_command!r}")
-        report_path = os.path.join(self.sandbox.workspace_dir, report_rel)
+            return TestRun(
+                None, empty,
+                f"cannot collect JUnit results from test command {test_command!r}; use a pytest command, "
+                f"a {JUNIT_PLACEHOLDER} placeholder, or test.report in .cerberus.yml",
+            )
+        cmd, report_rel = planned
+        report_path = self.sandbox._safe_resolve(report_rel)
         if os.path.exists(report_path):
             os.remove(report_path)
         res = self.sandbox.exec(cmd, timeout=self.timeout)
         if res.timed_out:
             return TestRun(None, res, f"test suite timed out after {self.timeout}s")
         try:
-            report = read_junit_report(report_path)
+            report = _without_excluded(read_junit_report(report_path), self.exclude)
         except JUnitReportError as exc:
             return TestRun(None, res, str(exc))
         if report.total == 0:
