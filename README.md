@@ -39,7 +39,7 @@ tests edited to hide the damage is **REFUSED (`SCOPE_VIOLATION`)**. The recordin
 
 | | Result |
 | --- | --- |
-| **Live on GitHub** | ✅ / ❌ checks posted on real pull requests by the Cerberus GitHub App |
+| **Live on GitHub** | **7 / 7** expected ✅ / ❌ checks on real pull requests across two repositories, posted by the Cerberus GitHub App |
 | **Real open-source projects** | **11 / 11** correct verdicts on sqlparse, boltons and more-itertools |
 | **Wrong patches approved** | **65% → 36%** compared with approving any patch whose own test passes |
 | **Correct fixes approved** | **7 / 7** — no good fix wrongly rejected |
@@ -163,8 +163,58 @@ GitHub Check Run.*
 
 ## Live on GitHub
 
-The Cerberus GitHub App was run against real pull requests on
-[`MuthuVarshith/test-repository`](https://github.com/MuthuVarshith/test-repository): a small checkout-pricing library
+The Cerberus GitHub App verifying real pull requests on GitHub, with each check triggered by a
+`/cerberus verify` comment and every pipeline stage streaming live in the terminal.
+
+### VoteVault: five pull requests, recorded live
+
+[`MuthuVarshith/VoteVault-`](https://github.com/MuthuVarshith/VoteVault-) is a Flask voting app with two real bugs:
+the admin CSV export crashes (`send_file` was given text instead of bytes), and `calculate_rate` divides by zero. Five
+pull requests propose fixes — two correct, three wrong in three different ways.
+
+<p align="center">
+  <img src="docs/assets/cerberus-github-live-demo.gif" alt="Time-lapse of Cerberus verifying five VoteVault pull requests: the terminal streams each pipeline while GitHub shows the results" width="1000">
+</p>
+
+*A 4-minute session compressed to 30 seconds. Left: the terminal streaming each check stage by stage — green for
+passing gates, red for refusals. Right: GitHub, where each `/cerberus verify` comment turns into a ✅ or ❌ on the pull
+request. **Full recording (4 min 18 s):**
+[`docs/video/cerberus-github-app-full-demo.mp4`](docs/video/cerberus-github-app-full-demo.mp4).*
+
+| Pull request | What the patch does | Cerberus on GitHub |
+| --- | --- | --- |
+| [#2](https://github.com/MuthuVarshith/VoteVault-/pull/2) Fix CSV export crash | sends the CSV as bytes | ✅ **Admitted** |
+| [#3](https://github.com/MuthuVarshith/VoteVault-/pull/3) Make the vote export work | fixes the crash **and deletes the admin check** | ❌ **`REGRESSION`** — caught the security hole |
+| [#4](https://github.com/MuthuVarshith/VoteVault-/pull/4) Guard calculate_rate | returns 0.0 for a zero period | ✅ **Admitted** |
+| [#5](https://github.com/MuthuVarshith/VoteVault-/pull/5) Handle ZeroDivisionError | swallows the error and returns `None` | ❌ **`GREEN_NOT_REACHED`** — the bug is not fixed |
+| [#6](https://github.com/MuthuVarshith/VoteVault-/pull/6) Simplify calculate_rate | changes the maths, then edits an existing test to match | ❌ **`SCOPE_VIOLATION`** — test weakening |
+
+<p align="center">
+  <img src="docs/assets/10-live-terminal-regression.png" alt="Split screen: the terminal shows Cerberus refusing pull request #3 with REGRESSION in red, naming test_export_votes_requires_admin; GitHub is on the right" width="1000">
+</p>
+
+*The moment the security hole is caught. Pull request #3's patch passes RED and GREEN — the export no longer crashes —
+but the regression gate reruns the project's own tests and `test_export_votes_requires_admin` now fails: with the
+admin check gone, anyone could download every vote. The refusal names the test, in red, as it happens.*
+
+<p align="center">
+  <img src="docs/assets/12-votevault-check-regression.png" alt="GitHub Checks tab for VoteVault pull request #3: Refused at REGRESSION, with the verified diff showing the deleted admin check" width="860">
+</p>
+
+*The same verdict as the reviewer sees it on GitHub. The evidence table shows which gates passed and which failed, and
+the verified diff at the bottom shows exactly what was wrong: the three deleted lines of the admin check.*
+
+<p align="center">
+  <img src="docs/assets/11-live-terminal-scope-violation.png" alt="Split screen: the terminal shows Cerberus refusing pull request #6 with SCOPE_VIOLATION; GitHub shows an Admitted check for another pull request" width="1000">
+</p>
+
+*Test weakening, refused. Pull request #6 rounds every rate and then edits an existing test so it still passes. The
+scope gate refuses any patch that changes lines of the tests it is judged by — while, on the right, a correct fix
+sits admitted.*
+
+### First live test: test-repository
+
+The first live run used [`MuthuVarshith/test-repository`](https://github.com/MuthuVarshith/test-repository): a small checkout-pricing library
 with a real off-by-one bug — an order of exactly 10 items should get the 10% bulk discount but pays full price
 (`bulk_price(2.0, 10)` returns `20.0` instead of `18.0`). Two pull requests offer a fix:
 
@@ -411,6 +461,13 @@ key** (a `.pem` file downloads — keep it private and never commit it).
 **2. Install the App** — on the App's page, **Install App** → your account → **Only select repositories** → pick the
 repositories Cerberus may check.
 
+<p align="center">
+  <img src="docs/assets/13-github-app-installation.png" alt="GitHub App installation page: read access to code, metadata and pull requests; read and write access to checks and issues; installed on two selected repositories" width="560">
+</p>
+
+*The installed App, as used for the live demos above: read-only access to code and pull requests, write access only to
+checks and issues, limited to the two repositories selected.*
+
 **3. Run Cerberus** — Docker must be running and the sandbox image built
 (`docker build -t cerberus-sandbox:py3.11 autonomous-pr-fixer/sandbox/`).
 
@@ -471,6 +528,7 @@ App JWTs · PyYAML · `cryptography`.
 | [`DEMO.md`](DEMO.md) | Step-by-step script for recording a 8–10 minute demo |
 | [`INTERVIEW.md`](INTERVIEW.md) | Technical Q&A on every design decision |
 | [`PORTFOLIO.md`](PORTFOLIO.md) | Concise project summary |
+| [`docs/video/`](docs/video/) | Full screen recording of the live GitHub App session (4 min 18 s) |
 | [`CERBERUS_PROGRESS.md`](CERBERUS_PROGRESS.md) | Engineering log: phases, decisions, test history |
 
 ## Limitations and roadmap
