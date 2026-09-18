@@ -290,4 +290,5 @@ of stale AF_UNIX socket files left by a crashed session; the folders holding the
 | 2026-09-17 | Portfolio phase: full suite with Docker | 231 passed, 5 skipped (9 min 13 s) |
 | 2026-09-17 | Portfolio phase: `python main.py --demo` (Docker) | `ADMITTED`; artifact `artifacts/run_b9b0f21bfd/run.json` |
 | 2026-09-17 | Portfolio phase: `python evaluation/external_repos.py --only sqlparse-332` | 4 of 4 expected verdicts, 2 min 49 s including the clone |
+| 2026-09-18 | GitHub App live on `MuthuVarshith/test-repository` (local service, smee.io relay, Docker) | PR #1 correct fix: Check Run success, `ADMITTED`; PR #2 careless fix: Check Run failure, `REFUSED / REGRESSION` naming `test_small_orders_pay_full_price` |
 | 2026-09-17 | Portfolio phase: headless `claude -p` probe | `Not logged in · Please run /login` — real coding-agent run not attempted |

@@ -6,8 +6,8 @@
 
 **Agents write patches. Cerberus decides whether a patch has earned a pull request.**
 
-[Demo](#demo) · [How it works](#how-it-works) · [Results](#results) · [Security](#security-model) ·
-[Quick start](#quick-start) · [Documentation](#documentation)
+[Demo](#demo) · [How it works](#how-it-works) · [Results](#results) · [Live on GitHub](#live-on-github) ·
+[Security](#security-model) · [Quick start](#quick-start) · [Use it on your repository](#use-cerberus-on-your-own-github-repository)
 
 </div>
 
@@ -39,6 +39,7 @@ tests edited to hide the damage is **REFUSED (`SCOPE_VIOLATION`)**. The recordin
 
 | | Result |
 | --- | --- |
+| **Live on GitHub** | ✅ / ❌ checks posted on real pull requests by the Cerberus GitHub App |
 | **Real open-source projects** | **11 / 11** correct verdicts on sqlparse, boltons and more-itertools |
 | **Wrong patches approved** | **65% → 36%** compared with approving any patch whose own test passes |
 | **Correct fixes approved** | **7 / 7** — no good fix wrongly rejected |
@@ -159,6 +160,47 @@ synthetic tests could not; both are now handled and locked in by regression test
 *This screenshot is the vocabulary of the gate. A refusal is only useful if the author can act on it, so every
 refusal carries a code that names the exact gate and reason, and the same code is recorded in `run.json` and in the
 GitHub Check Run.*
+
+## Live on GitHub
+
+The Cerberus GitHub App was run against real pull requests on
+[`MuthuVarshith/test-repository`](https://github.com/MuthuVarshith/test-repository): a small checkout-pricing library
+with a real off-by-one bug — an order of exactly 10 items should get the 10% bulk discount but pays full price
+(`bulk_price(2.0, 10)` returns `20.0` instead of `18.0`). Two pull requests offer a fix:
+
+- [**#1**](https://github.com/MuthuVarshith/test-repository/pull/1) — the correct one-character fix (`>` → `>=`)
+  plus a new test for exactly 10 items.
+- [**#2**](https://github.com/MuthuVarshith/test-repository/pull/2) — a careless fix that discounts *every* order. It
+  makes the new test pass, so an agent checking only its own test would ship it.
+
+```text
+comment "/cerberus verify" on a PR ─► GitHub App webhook ─► Cerberus (signature checked)
+      ─► RED → baseline → GREEN → regression → scope, in Docker ─► ✅ / ❌ Check Run on the PR
+```
+
+<p align="center">
+  <img src="docs/assets/07-github-pr-trigger.png" alt="Two pull requests with a /cerberus verify comment; the commit on #1 shows a green tick, the commit on #2 a red cross" width="760">
+</p>
+
+*The trigger, as a reviewer sees it. The maintainer comments `/cerberus verify` on each pull request; about a minute
+later the commit carries Cerberus's verdict — a green tick on #1, a red cross on #2. Only users with write access can
+trigger a check, and bot comments are ignored.*
+
+<p align="center">
+  <img src="docs/assets/08-github-check-admitted.png" alt="GitHub Checks tab for pull request #1: Admitted, every verification gate passed, with the gate table, reproduction test and verified diff" width="860">
+</p>
+
+*Pull request #1 — **Admitted**. The Check Run is the evidence report: the bug reproduced in 3 of 3 runs, the
+5-test baseline, GREEN, no test newly failing, and the exact files changed, followed by the reproduction test and the
+diff that was verified. This is what a reviewer reads instead of re-running anything.*
+
+<p align="center">
+  <img src="docs/assets/09-github-check-refused.png" alt="GitHub Checks tab for pull request #2: Refused at REGRESSION, naming tests.test_discounts::test_small_orders_pay_full_price" width="860">
+</p>
+
+*Pull request #2 — **Refused at `REGRESSION`**. RED and GREEN both passed — the patch really does fix the 10-item
+case — but the regression gate found that `test_small_orders_pay_full_price` now fails, and names it. This is the
+refusal the gate exists for.*
 
 ## Security model
 
@@ -288,8 +330,10 @@ cd autonomous-pr-fixer
 uvicorn github.webhook_handler:app --host 127.0.0.1 --port 8000
 ```
 
-The service exposes only `GET /health` and `POST /webhook` and runs as a GitHub App. Required permissions: Checks,
-Pull requests, Issues and Contents (read & write), Metadata (read). Workflows permission is not requested.
+The service exposes only `GET /health` and `POST /webhook` and runs as a GitHub App (setup:
+[Use Cerberus on your own GitHub repository](#use-cerberus-on-your-own-github-repository)). Verifying pull requests
+needs Checks and Issues (read & write), Contents and Pull requests (read); `/cerberus repair` with publishing enabled
+also needs Contents and Pull requests (read & write). Workflows permission is never requested.
 
 | Trigger | Who | What happens |
 | --- | --- | --- |
@@ -331,6 +375,72 @@ environment; it can never publish.
 
 </details>
 
+## Use Cerberus on your own GitHub repository
+
+Cerberus runs as a **GitHub App** that you register under your own account and run on your own machine (or a
+server). GitHub sends it an event when you ask for a check; Cerberus verifies the pull request in Docker and posts the
+result back as a Check Run. This is exactly how the [live test above](#live-on-github) was run.
+
+**What your repository needs**
+
+- Python code with a **pytest** test suite that passes on the base branch, runnable **offline** (no database,
+  network or API keys during tests).
+- Dependencies installable with pip: a `requirements.txt`, `pyproject.toml` or `setup.py` (or a
+  [`.cerberus.yml`](#use-cerberus-on-your-own-github-repository) `setup:` list).
+- A pull request that fixes a bug and adds **exactly one new test file** that fails before the fix and passes after it.
+  The App uses that file as the reproduction test. *(A PR that appends its test to an existing test file is refused
+  with guidance; the CLI can still verify it with `--base/--head --repro-test`.)*
+- A PR description (or linked `Fixes #N` issue) that names the function involved, e.g. *"`bulk_price(2.0, 10)` returns
+  20.0 instead of 18.0"*.
+
+**1. Register the GitHub App** — GitHub → Settings → Developer settings → GitHub Apps → **New GitHub App**:
+
+| Field | Value |
+| --- | --- |
+| Homepage URL | your repository or this project's URL |
+| Webhook → Active | ✅ |
+| Webhook URL | a [smee.io](https://smee.io/new) channel URL (for a laptop) or your server's `https://…/webhook` |
+| Webhook secret | a long random string you keep private |
+| Repository permissions | **Checks:** Read & write · **Issues:** Read & write · **Contents:** Read-only · **Pull requests:** Read-only · Metadata: Read-only (automatic) |
+| Subscribe to events | **Issue comment**, **Pull request** |
+| Where can it be installed | Only on this account |
+
+Everything else stays empty or at *No access*. After creating it, note the **App ID** and click **Generate a private
+key** (a `.pem` file downloads — keep it private and never commit it).
+
+**2. Install the App** — on the App's page, **Install App** → your account → **Only select repositories** → pick the
+repositories Cerberus may check.
+
+**3. Run Cerberus** — Docker must be running and the sandbox image built
+(`docker build -t cerberus-sandbox:py3.11 autonomous-pr-fixer/sandbox/`).
+
+On Windows, one command starts the smee relay and the service, asks for the App ID, key and secret (the secret as
+hidden input), and shows each check's pipeline live in the terminal:
+
+```bash
+powershell -ExecutionPolicy Bypass -File tools/github-app/start_cerberus_app.ps1
+```
+
+On macOS or Linux, the same thing by hand:
+
+```bash
+export GITHUB_APP_ID=123456 GITHUB_APP_PRIVATE_KEY_PATH=~/Downloads/your-app.private-key.pem
+read -rs GITHUB_WEBHOOK_SECRET && export GITHUB_WEBHOOK_SECRET
+python tools/github-app/smee_forward.py https://smee.io/YOUR-CHANNEL http://127.0.0.1:8000/webhook &
+cd autonomous-pr-fixer && python -m uvicorn github.webhook_handler:app --host 127.0.0.1 --port 8000
+```
+
+[`tools/github-app/smee_forward.py`](tools/github-app/smee_forward.py) is a standard-library relay (no Node.js
+needed) that preserves GitHub's HMAC signature. On a server with a public HTTPS address, skip the relay and point the
+App's webhook URL straight at `/webhook`.
+
+**4. Trigger a check** — on a pull request, either comment `/cerberus verify` or add a label named `cerberus` (new
+commits on a labelled PR are re-checked automatically). Only users with write access can trigger checks.
+
+**5. Read the result** — within a minute or two the PR's commit shows ✅ or ❌; **Details** opens the full evidence
+report. Locally, each run's output is in `autonomous-pr-fixer/.cerberus-app/work/<run_id>/cli.log` and its evidence
+in `.cerberus-app/artifacts/<run_id>/run.json`. Stop the service with **Ctrl+C** when you are done.
+
 ## Project structure
 
 ```text
@@ -346,6 +456,7 @@ autonomous-pr-fixer/
 ├── examples/        demo fixture
 └── tests/           231 tests, including real-Docker integration tests
 docs/assets/         demo recording and screenshots used in this README
+tools/github-app/    smee relay and one-command launcher for running the GitHub App locally
 site/                static summary page
 ```
 
@@ -366,12 +477,13 @@ App JWTs · PyYAML · `cryptography`.
 
 Cerberus is a research project for Python/pytest repositories. Passing the gates is strong evidence, not proof: a
 patch that passes every visible test can still be wrong, which the benchmark measures directly. The Docker sandbox
-has been validated on Windows (Docker Desktop), and the GitHub App against a simulated GitHub API.
+has been validated on Windows (Docker Desktop), and the GitHub App on a real repository with the service running
+locally behind a smee.io relay.
 
 Next steps:
 
 1. Live end-to-end runs with a real coding agent (the Claude Code integration is built).
-2. The GitHub App installed on real repositories, including PRs that append tests to existing files.
+2. The GitHub App verifying PRs that append their test to an existing test file, and hosted on a server.
 3. Sandbox validation on a Linux host.
 4. A larger evaluation set across more open-source projects.
 
