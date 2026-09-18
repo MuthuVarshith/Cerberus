@@ -168,8 +168,8 @@ and removes itself. If Docker is missing, the run fails closed rather than falli
 
 ## 7. Optional: a real coding agent — 2 min, requires login
 
-Only if you have run `claude` → `/login` first, so headless `claude -p` is authenticated (see
-[`README.md`](README.md), *Let a coding agent write the fix*).
+Only if the agent's command-line tool is installed and signed in; for the built-in `claude-code` preset that
+means logging in to that CLI once (see [`README.md`](README.md), *Verify a Patch → An external coding agent*).
 
 ```bash
 git clone --quiet https://github.com/andialbrecht/sqlparse.git artifacts/agent-demo
@@ -211,5 +211,5 @@ is a better demo than a staged success.
 | `Docker daemon is not reachable` | Docker Desktop not started | start it, wait for the whale icon, rerun |
 | `Sandbox image 'cerberus-sandbox:py3.11' is not available` | image not built | `docker build -t cerberus-sandbox:py3.11 sandbox/` |
 | First external run is slow | it clones sqlparse | run it once before recording; the clone is cached under `artifacts/` |
-| `Not logged in` from the agent segment | headless Claude Code not authenticated | run `claude`, then `/login`, then retry — or skip segment 7 |
+| `Not logged in` from the agent segment | the agent's CLI is not signed in | sign in to the agent CLI, then retry — or skip segment 7 |
 | A run ends in `ERROR` | the sandbox could not give the isolation it promises | that is fail-closed behaviour; say so and show `run.json` |

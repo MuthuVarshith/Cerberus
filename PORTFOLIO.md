@@ -80,5 +80,5 @@ engineering log: [`CERBERUS_PROGRESS.md`](CERBERUS_PROGRESS.md)
 A research project for Python/pytest repositories. In the benchmark, every bad patch the tests could expose was
 refused (13 of 13); a patch that passes every visible test can still be wrong, which the benchmark measures rather
 than hides. Next: live runs with a
-real coding agent (the Claude Code integration is built), the GitHub App on real repositories, and a larger
+real coding agent (the external coding-agent integration is built), the GitHub App on a hosted server, and a larger
 evaluation set.

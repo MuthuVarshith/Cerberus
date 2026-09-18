@@ -12,7 +12,7 @@ has earned a pull request, with evidence the patch's author does not control. It
 ends in exactly one terminal state: `ADMITTED`, `REFUSED` with a code naming the gate that stopped it, or `ERROR`
 (`harness/pipeline_state.py`), and writes `artifacts/<run_id>/run.json`.
 
-### 2. Why can't we simply trust Claude Code?
+### 2. Why can't we simply trust a coding agent?
 
 Not because agents are bad at patches, but because self-assessment is the weakest evidence available: the agent
 chose the change, chose which tests to run, and "the test I just wrote passes" says nothing about the tests that
