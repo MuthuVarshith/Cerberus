@@ -53,7 +53,7 @@ run the gates.
 | | Cerberus | Ungated baseline (admit when the reproduction test passes) |
 | --- | --- | --- |
 | Admitted | 11 | 20 |
-| Admitted but should have been refused | 4 (36%) | 13 (65%) |
+| Wrong patches approved | 4 (36%) | 13 (65%) |
 | Correct fixes admitted | 7 of 7 | 7 of 7 |
 | Rejection accuracy | 12 of 17 | — |
 
@@ -75,10 +75,10 @@ summary page: [`site/index.html`](site/index.html) (static, runs nothing) ·
 recording script: [`DEMO.md`](DEMO.md) · technical Q&A: [`INTERVIEW.md`](INTERVIEW.md) ·
 engineering log: [`CERBERUS_PROGRESS.md`](CERBERUS_PROGRESS.md)
 
-## Limitations
+## Scope and next steps
 
-Research prototype for Python/pytest repositories. Four of eleven benchmark admissions were wrong — plausible-but-wrong
-patches that pass every visible test, a limit of test-based verification rather than a missing feature. The Docker
-path has run on Windows only; the GitHub App is tested against a fake GitHub API; no real coding agent has been run
-through the gate yet; three external bugs are a smoke test, not a representative sample; a deliberately malicious
-repository could forge its own test results.
+A research project for Python/pytest repositories. In the benchmark, every bad patch the tests could expose was
+refused (13 of 13); a patch that passes every visible test can still be wrong, which the benchmark measures rather
+than hides. Next: live runs with a
+real coding agent (the Claude Code integration is built), the GitHub App on real repositories, and a larger
+evaluation set.

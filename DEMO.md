@@ -168,7 +168,8 @@ and removes itself. If Docker is missing, the run fails closed rather than falli
 
 ## 7. Optional: a real coding agent — 2 min, requires login
 
-Only if you have run `claude` → `/login` first (see [`README.md`](README.md), *Real coding agents*).
+Only if you have run `claude` → `/login` first, so headless `claude -p` is authenticated (see
+[`README.md`](README.md), *Let a coding agent write the fix*).
 
 ```bash
 git clone --quiet https://github.com/andialbrecht/sqlparse.git artifacts/agent-demo
