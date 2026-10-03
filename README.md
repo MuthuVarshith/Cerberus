@@ -51,7 +51,7 @@ own test suite against a recorded baseline, and measures what the patch actually
 | Real open-source repositories (sqlparse, boltons, more-itertools) | **11 / 11** expected verdicts |
 | Correct fixes approved in the frozen benchmark | **7 / 7** — none wrongly rejected |
 | Wrong patches approved, versus approving any patch whose own test passes | **65% → 36%** (13 of 20 → 4 of 11) |
-| Automated test suite | **231** tests, including 13 run inside real Docker containers |
+| Automated test suite | **282** tests, including 13 run inside real Docker containers |
 | Live GitHub pull requests across two repositories | **7 / 7** expected ✅ / ❌ Check Runs |
 
 <p align="center">
