@@ -44,3 +44,6 @@ cerberus_demo_*/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Repair-agent experiment run directories (summaries and reports are kept)
+autonomous-pr-fixer/results/*/runs/
