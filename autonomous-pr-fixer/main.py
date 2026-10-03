@@ -701,6 +701,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    raw = sys.argv[1:] if argv is None else argv
+    if raw and raw[0] == "agent":
+        from repair.cli import main as agent_main
+        return agent_main(raw[1:])
     args = _build_arg_parser().parse_args(argv)
     isolation = ISOLATION_HOST_UNSAFE if args.unsafe_local_sandbox else None
 
