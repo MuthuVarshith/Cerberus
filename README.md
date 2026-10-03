@@ -324,6 +324,19 @@ python main.py --repo /path/to/repo --title "..." --body "..." \
 Requires a provider API key (see [Configuration](#configuration)); `--use-llm-repro` also generates the reproduction
 test. Model output is held to the same gates. Without a key, the run is refused rather than silently skipped.
 
+**E — The built-in repair agent (Cerberus 2.0, Phase 1)**
+
+```bash
+python main.py agent run --repo /path/to/repo --issue "parse_date fails on leap years"   --body "..." --repro-test path/to/test_reproduce.py
+python main.py agent demo     # scripted negative path: bad patch refused (REGRESSION), feedback, fix admitted
+```
+
+One tool-using model inspects the repository through sandboxed tools (search, read, symbols, tests, git diff, edit)
+and submits its workspace diff; every submission is judged by the unchanged gate, and any refusal — GREEN, REGRESSION,
+SCOPE — goes back to the model as structured feedback for a bounded number of retries. The agent cannot edit tests or
+admit its own patch. Real-model repair results are not measured yet. See [`docs/cerberus-agent.md`](docs/cerberus-agent.md)
+and [`docs/phase1-results.md`](docs/phase1-results.md).
+
 ## Configuration
 
 <details>
@@ -438,12 +451,13 @@ autonomous-pr-fixer/
 ├── agents/         reproduction (RED/GREEN), regression, patch loop, patch sources, repository setup
 ├── harness/        Docker sandbox, JUnit parsing, scope gate, admission controller, state machine
 ├── github/         GitHub App: authentication, webhook, run store, Check Runs, PR publishing
+├── repair/         repair agent: tools, gate adapter, bounded loop, tracing, metrics, evaluation
 ├── retrieval/      Python AST index and lexical search
 ├── sandbox/        Dockerfile for the verification image
 ├── benchmark/      frozen instances, hidden tests, manifest, reports
 ├── evaluation/     benchmark runner and real-repository runner
 ├── examples/       demo project
-└── tests/          231 tests, including real-Docker integration tests
+└── tests/          282 tests, including real-Docker integration tests
 docs/assets/        screenshots and recordings used in this README
 tools/github-app/   smee.io relay and Windows launcher for running the App locally
 site/               one-page visual summary
@@ -463,6 +477,8 @@ Built with Python, pytest, JUnit XML, Docker, Git, FastAPI, SQLite and the GitHu
 | [External evaluation report](autonomous-pr-fixer/evaluation/external/report.md) | Real-repository validation |
 | [`docs/video/`](docs/video/cerberus-github-app-full-demo.mp4) | Full recording of the live GitHub App session |
 | [`CERBERUS_PROGRESS.md`](CERBERUS_PROGRESS.md) | Engineering history and test log |
+| [`docs/cerberus-agent.md`](docs/cerberus-agent.md) | Repair agent (Phase 1): tools, security boundaries, metrics, evaluation |
+| [`docs/phase1-results.md`](docs/phase1-results.md) | Phase 1 status and results |
 
 ## Limitations
 
@@ -475,8 +491,8 @@ Built with Python, pytest, JUnit XML, Docker, Git, FastAPI, SQLite and the GitHu
   Linux or macOS host running the full sandbox has not been validated.
 - GitHub App validation covers the documented live setup: a locally running service behind a smee.io relay, on two
   repositories. The App requires a pull request to add exactly one new test file.
-- An external coding-agent integration is implemented; end-to-end validation with a live agent remains an explicit
-  limitation.
+- An external coding-agent integration and a built-in repair agent are implemented and tested with scripted models
+  against the real gate; their repair quality with a live model has not been measured yet.
 - A deliberately malicious repository could forge its own test results, because repository code runs in the same process
   as its test runner. Cerberus verifies patches to trusted-but-buggy repositories.
 
