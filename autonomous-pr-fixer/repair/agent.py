@@ -161,7 +161,11 @@ class RepairAgent:
                           {"iteration": state.current_iteration}, error=str(exc))
                     status, message = FinalStatus.LLM_FAILURE, str(exc)[:500]
                     break
-                cost = estimate_cost(resp.model or state.model, resp.usage)
+                if cfg.input_price_per_mtok is not None and cfg.output_price_per_mtok is not None:
+                    cost = round(resp.usage.input_tokens * cfg.input_price_per_mtok / 1e6
+                                 + resp.usage.output_tokens * cfg.output_price_per_mtok / 1e6, 6)
+                else:
+                    cost = estimate_cost(resp.model or state.model, resp.usage)
                 state.input_tokens += resp.usage.input_tokens
                 state.output_tokens += resp.usage.output_tokens
                 state.total_tokens = state.input_tokens + state.output_tokens

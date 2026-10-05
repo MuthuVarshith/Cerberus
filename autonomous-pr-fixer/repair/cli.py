@@ -22,6 +22,8 @@ from repair.llm.provider import LLMError
 
 
 def _config(args: argparse.Namespace) -> RepairConfig:
+    if getattr(args, "provider", None):
+        os.environ["LLM_PROVIDER"] = args.provider  # before from_env, so provider defaults follow it
     return RepairConfig.from_env(
         model=getattr(args, "model", None),
         max_attempts=getattr(args, "max_attempts", None),
@@ -100,7 +102,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     def common(sp: argparse.ArgumentParser) -> None:
-        sp.add_argument("--model", help="Model id (default: LLM_MODEL or claude-sonnet-5-5)")
+        sp.add_argument("--provider", choices=["anthropic", "gemini"], help="Default: LLM_PROVIDER or anthropic")
+        sp.add_argument("--model", help="Model id (default: LLM_MODEL, else gemini-2.5-flash / claude-sonnet-5-5)")
         sp.add_argument("--max-attempts", type=int, help="Gate submissions (default: MAX_ATTEMPTS or 3)")
         sp.add_argument("--unsafe-local-sandbox", action="store_true",
                         help="Run repository code on the host (trusted fixtures only)")

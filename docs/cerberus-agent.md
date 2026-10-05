@@ -193,8 +193,12 @@ Environment variables (see [`autonomous-pr-fixer/.env.example`](../autonomous-pr
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `LLM_PROVIDER` | `anthropic` | Phase 1 implements Anthropic; the `ChatModel` protocol is provider-neutral |
-| `LLM_MODEL` | `claude-sonnet-5-5` | model id |
+| `LLM_PROVIDER` | `anthropic` | `anthropic` or `gemini` (Google AI Studio, OpenAI-compatible endpoint) |
+| `LLM_MODEL` | `claude-sonnet-5-5` / `gemini-2.5-flash` | model id; default depends on the provider |
+| `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | unset | Google AI Studio key, sent only in the Authorization header |
+| `LLM_MIN_SECONDS_BETWEEN_CALLS` | 6 for gemini, else 0 | spacing for free-tier rate limits; 429/5xx are retried with the server's delay |
+| `LLM_FREE_TIER` | `true` | gemini only: record cost as $0; set `false` (and the price variables) for a paid key |
+| `LLM_INPUT_PRICE_PER_MTOK` / `LLM_OUTPUT_PRICE_PER_MTOK` | unset | override the price table |
 | `LLM_EFFORT` | `medium` | Anthropic `output_config.effort` |
 | `LLM_SERVER_FALLBACKS` | `true` | Anthropic server-side refusal fallbacks (`fallbacks: "default"`) |
 | `MAX_ATTEMPTS` | 3 | gate submissions |
@@ -226,6 +230,17 @@ resets and applies iv-01's correct candidate, and Cerberus admits it. The model 
 
 ## 13. Running with a real model
 
+Free (Google AI Studio), PowerShell:
+
+```powershell
+$env:LLM_PROVIDER = "gemini"; $env:GEMINI_API_KEY = "<your key>"
+python main.py agent run --repo ./target-repo --issue "percent raises ZeroDivisionError when whole is 0" --repro-test ./test_reproduce.py
+python main.py agent evaluate --only v1-intervals-contains-excludes-the-end-point --experiment-id gemini-smoke
+python main.py agent evaluate --limit 12 --experiment-id phase1-gemini25flash-run1
+```
+
+Paid (Anthropic):
+
 ```bash
 export ANTHROPIC_API_KEY=...            # or an `ant auth login` profile
 python main.py agent run --repo ./target-repo --issue "percent raises ZeroDivisionError when whole is 0" \
@@ -247,5 +262,6 @@ attempts, tool calls, tokens and cost. Artifacts: `artifacts/repair/<run_id>/age
   refused as `SCOPE_VIOLATION` unless `.cerberus.yml` widens scope. The agent learns this only from feedback.
 - Host-side reads and the model loop run on the host; only repository code execution is sandboxed.
 - Python/pytest repositories only, as for the gate. Validated on Windows with Docker Desktop.
-- Only the Anthropic adapter exists; other providers need a `ChatModel` implementation.
+- Adapters exist for Anthropic and for OpenAI-compatible endpoints (used for Gemini); others need a small `ChatModel`.
+- Free-tier quotas can stop an evaluation midway (`LLM_FAILURE` after retries); re-run the missing tasks with `--only`.
 - 12 tasks cannot establish a rate with any precision; see the Phase 1 results for intervals.

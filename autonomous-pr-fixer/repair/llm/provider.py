@@ -90,9 +90,15 @@ def estimate_cost(model: str, usage: Usage) -> Optional[float]:
     return round(usage.input_tokens * price[0] / 1e6 + usage.output_tokens * price[1] / 1e6, 6)
 
 
-def create_model(provider: str, model: str, effort: Optional[str] = None, server_fallbacks: bool = True) -> ChatModel:
+def create_model(provider: str, model: str, effort: Optional[str] = None, server_fallbacks: bool = True,
+                 min_interval: float = 0.0) -> ChatModel:
     provider = provider.lower()
     if provider == "anthropic":
         from repair.llm.anthropic import AnthropicChatModel
         return AnthropicChatModel(model, effort=effort, server_fallbacks=server_fallbacks)
-    raise LLMError(f"Unsupported LLM_PROVIDER '{provider}'. Phase 1 supports: anthropic.")
+    if provider == "gemini":
+        import os
+        from repair.llm.openai_compat import GEMINI_BASE_URL, OpenAICompatChatModel
+        key_env = "GEMINI_API_KEY" if os.environ.get("GEMINI_API_KEY") else "GOOGLE_API_KEY"
+        return OpenAICompatChatModel(model, GEMINI_BASE_URL, key_env, reasoning_effort=effort, min_interval=min_interval)
+    raise LLMError(f"Unsupported LLM_PROVIDER '{provider}'. Supported: anthropic, gemini.")

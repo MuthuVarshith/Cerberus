@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL = "claude-sonnet-5-5"
+DEFAULT_MODELS = {"anthropic": "claude-sonnet-5-5", "gemini": "gemini-2.5-flash"}
 
 
 def _env(name: str, default: str) -> str:
@@ -45,12 +46,30 @@ class RepairConfig(BaseModel):
     max_tool_output_chars: int = Field(12_000, ge=500)
     max_text_only_turns: int = Field(3, ge=1, description="Consecutive replies without a tool call before giving up")
     isolation: Optional[str] = None  # None -> Cerberus default (docker)
+    min_seconds_between_calls: float = Field(0.0, ge=0, description="Client-side spacing for rate-limited (free) tiers")
+    input_price_per_mtok: Optional[float] = Field(None, ge=0, description="Overrides the built-in price table (USD)")
+    output_price_per_mtok: Optional[float] = Field(None, ge=0)
 
     @classmethod
     def from_env(cls, **overrides) -> "RepairConfig":
+        provider = _env("LLM_PROVIDER", DEFAULT_PROVIDER).lower()
+        free_gemini = provider == "gemini" and _env("LLM_FREE_TIER", "true").lower() not in ("0", "false", "no")
+
+        def _price(name: str) -> Optional[float]:
+            raw = os.environ.get(name, "").strip()
+            if raw:
+                try:
+                    return float(raw)
+                except ValueError:
+                    return None
+            return 0.0 if free_gemini else None  # Google AI Studio free tier is not billed
+
         values = dict(
-            provider=_env("LLM_PROVIDER", DEFAULT_PROVIDER).lower(),
-            model=_env("LLM_MODEL", DEFAULT_MODEL),
+            provider=provider,
+            model=_env("LLM_MODEL", DEFAULT_MODELS.get(provider, DEFAULT_MODEL)),
+            min_seconds_between_calls=_env_float("LLM_MIN_SECONDS_BETWEEN_CALLS", 6.0 if provider == "gemini" else 0.0),
+            input_price_per_mtok=_price("LLM_INPUT_PRICE_PER_MTOK"),
+            output_price_per_mtok=_price("LLM_OUTPUT_PRICE_PER_MTOK"),
             max_attempts=_env_int("MAX_ATTEMPTS", 3),
             max_tool_calls=_env_int("MAX_TOOL_CALLS", 50),
             max_agent_tokens=_env_int("MAX_AGENT_TOKENS", 400_000),

@@ -246,7 +246,7 @@ def evaluate(config: RepairConfig, limit: Optional[int] = None, only: Optional[S
                                note=f"evaluation cost budget ${config.max_evaluation_cost} reached")
             else:
                 printer(f"\n=== {t.task_id} ({t.source}) ===")
-                model = model_factory() if model_factory else create_model(config.provider, config.model, config.effort, config.server_fallbacks)
+                model = model_factory() if model_factory else create_model(config.provider, config.model, config.effort, config.server_fallbacks, config.min_seconds_between_calls)
                 state = run_repair(t.task, config, model=model, run_id=f"{experiment_id}-{t.task_id}",
                                    out_root=os.path.join(out, "runs"), printer=printer)
                 hidden: Measured = NOT_MEASURED

@@ -45,7 +45,7 @@ def run_repair(task: RepairTask, config: RepairConfig, model: Optional[ChatModel
                         issue_id=task.issue_id, issue_title=task.title, issue_description=task.body,
                         max_iterations=config.max_attempts, model=config.model)
     if model is None:
-        model = create_model(config.provider, config.model, config.effort, config.server_fallbacks)  # raises LLMError without a key
+        model = create_model(config.provider, config.model, config.effort, config.server_fallbacks, config.min_seconds_between_calls)  # raises LLMError without a key
     try:
         sandbox = open_workspace(task.repo_dir, task.reproduction_test, base_ref=task.base_ref,
                                  isolation=config.isolation, timeout_sec=config.tool_timeout_seconds)
