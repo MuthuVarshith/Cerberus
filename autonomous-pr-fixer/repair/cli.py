@@ -103,7 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def common(sp: argparse.ArgumentParser) -> None:
         sp.add_argument("--provider", choices=["anthropic", "gemini"], help="Default: LLM_PROVIDER or anthropic")
-        sp.add_argument("--model", help="Model id (default: LLM_MODEL, else gemini-2.5-flash / claude-sonnet-5-5)")
+        sp.add_argument("--model", help="Model id (default: LLM_MODEL, else gemini-3.8-flash / claude-sonnet-5-5)")
         sp.add_argument("--max-attempts", type=int, help="Gate submissions (default: MAX_ATTEMPTS or 3)")
         sp.add_argument("--unsafe-local-sandbox", action="store_true",
                         help="Run repository code on the host (trusted fixtures only)")

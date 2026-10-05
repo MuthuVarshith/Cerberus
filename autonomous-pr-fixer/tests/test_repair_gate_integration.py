@@ -96,3 +96,14 @@ def test_cli_negative_demo_is_refused_then_admitted(capsys):
     assert main.main(["agent", "demo", "--unsafe-local-sandbox"]) == 0
     out = capsys.readouterr().out
     assert "SCRIPTED DEMO" in out and "FAIL (REFUSED, REGRESSION, REGRESSION)" in out and "Final status: ADMITTED" in out
+
+
+def test_evaluation_stops_after_a_non_retryable_provider_error(tmp_path):
+    from repair.evaluation import EvalTask, evaluate
+
+    tasks = [EvalTask(task_id=f"t{i}", source="fixture", task=_task(tmp_path / f"r{i}"), ground_truth_files=["calc/rates.py"],
+                      hidden_check=lambda diff: True) for i in range(2)]
+    summary = evaluate(fx.config(), tasks=tasks, results_root=str(tmp_path / "results"), experiment_id="e",
+                       model_factory=lambda: FakeChatModel([RuntimeError("HTTP 404: model not available")]),
+                       printer=lambda line: None)
+    assert summary["metrics"]["final_status_breakdown"] == {"LLM_FAILURE": 1, "SKIPPED_CONFIG_ERROR": 1}

@@ -194,7 +194,7 @@ Environment variables (see [`autonomous-pr-fixer/.env.example`](../autonomous-pr
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `LLM_PROVIDER` | `anthropic` | `anthropic` or `gemini` (Google AI Studio, OpenAI-compatible endpoint) |
-| `LLM_MODEL` | `claude-sonnet-5-5` / `gemini-2.5-flash` | model id; default depends on the provider |
+| `LLM_MODEL` | `claude-sonnet-5-5` / `gemini-3.8-flash` | model id; default depends on the provider |
 | `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | unset | Google AI Studio key, sent only in the Authorization header |
 | `LLM_MIN_SECONDS_BETWEEN_CALLS` | 6 for gemini, else 0 | spacing for free-tier rate limits; 429/5xx are retried with the server's delay |
 | `LLM_FREE_TIER` | `true` | gemini only: record cost as $0; set `false` (and the price variables) for a paid key |
@@ -236,7 +236,7 @@ Free (Google AI Studio), PowerShell:
 $env:LLM_PROVIDER = "gemini"; $env:GEMINI_API_KEY = "<your key>"
 python main.py agent run --repo ./target-repo --issue "percent raises ZeroDivisionError when whole is 0" --repro-test ./test_reproduce.py
 python main.py agent evaluate --only v1-intervals-contains-excludes-the-end-point --experiment-id gemini-smoke
-python main.py agent evaluate --limit 12 --experiment-id phase1-gemini25flash-run1
+python main.py agent evaluate --limit 12 --experiment-id phase1-gemini38flash-run1
 ```
 
 Paid (Anthropic):
@@ -263,5 +263,6 @@ attempts, tool calls, tokens and cost. Artifacts: `artifacts/repair/<run_id>/age
 - Host-side reads and the model loop run on the host; only repository code execution is sandboxed.
 - Python/pytest repositories only, as for the gate. Validated on Windows with Docker Desktop.
 - Adapters exist for Anthropic and for OpenAI-compatible endpoints (used for Gemini); others need a small `ChatModel`.
+- A non-retryable provider error (HTTP 400/401/403/404 before any tokens) stops the evaluation; remaining tasks are recorded as `SKIPPED_CONFIG_ERROR`.
 - Free-tier quotas can stop an evaluation midway (`LLM_FAILURE` after retries); re-run the missing tasks with `--only`.
 - 12 tasks cannot establish a rate with any precision; see the Phase 1 results for intervals.

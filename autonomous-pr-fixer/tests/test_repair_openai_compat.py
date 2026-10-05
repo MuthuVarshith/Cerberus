@@ -97,7 +97,7 @@ def test_gemini_config_defaults(monkeypatch):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("LLM_PROVIDER", "gemini")
     cfg = RepairConfig.from_env()
-    assert cfg.model == "gemini-2.5-flash" and cfg.min_seconds_between_calls == 6.0
+    assert cfg.model == "gemini-3.8-flash" and cfg.min_seconds_between_calls == 6.0
     assert cfg.input_price_per_mtok == 0.0 and cfg.output_price_per_mtok == 0.0
     monkeypatch.setenv("LLM_FREE_TIER", "false")
     assert RepairConfig.from_env().input_price_per_mtok is None

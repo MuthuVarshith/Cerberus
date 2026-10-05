@@ -238,8 +238,13 @@ def evaluate(config: RepairConfig, limit: Optional[int] = None, only: Optional[S
 
         results: List[TaskResult] = []
         spent = 0.0
+        config_error = ""
         for t in tasks:
-            if spent >= config.max_evaluation_cost:
+            if config_error:
+                r = TaskResult(task_id=t.task_id, final_status="SKIPPED_CONFIG_ERROR", admitted=False, attempts=0,
+                               duration_seconds=0, input_tokens=0, output_tokens=0, total_tokens=0, cost_usd=0.0,
+                               tool_calls=0, ground_truth_files=t.ground_truth_files, note=config_error)
+            elif spent >= config.max_evaluation_cost:
                 r = TaskResult(task_id=t.task_id, final_status="SKIPPED_BUDGET", admitted=False, attempts=0,
                                duration_seconds=0, input_tokens=0, output_tokens=0, total_tokens=0, cost_usd=0.0,
                                tool_calls=0, ground_truth_files=t.ground_truth_files,
@@ -255,6 +260,12 @@ def evaluate(config: RepairConfig, limit: Optional[int] = None, only: Optional[S
                     hidden = t.hidden_check(state.generated_patch)
                 r = task_result_from_state(t.task_id, state, t.ground_truth_files, hidden)
                 spent += state.estimated_cost or 0.0
+                # A rejected model id, bad key or bad request fails every task the same way: stop early.
+                if (state.final_status and state.final_status.value == "LLM_FAILURE" and state.total_tokens == 0
+                        and re.match(r"HTTP (400|401|403|404)", state.final_message or "")):
+                    config_error = f"stopped after a non-retryable provider error: {state.final_message[:200]}"
+                    printer(f"
+  Provider configuration error; remaining tasks are skipped. {config_error}")
             results.append(r)
             with open(os.path.join(out, "task-results.jsonl"), "a", encoding="utf-8") as f:
                 f.write(r.model_dump_json() + "\n")
