@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
@@ -205,8 +206,12 @@ def render_report(summary: Dict[str, Any], results: Sequence[TaskResult]) -> str
 def evaluate(config: RepairConfig, limit: Optional[int] = None, only: Optional[Sequence[str]] = None,
              model_factory: Optional[Callable[[], Any]] = None, results_root: str = DEFAULT_RESULTS,
              experiment_id: Optional[str] = None, tasks: Optional[List[EvalTask]] = None,
-             printer: Callable[[str], None] = print) -> Dict[str, Any]:
+             printer: Callable[[str], None] = print, cooldown_seconds: Optional[float] = None,
+             sleep: Callable[[float], None] = time.sleep) -> Dict[str, Any]:
     from repair.llm.provider import create_model
+
+    if cooldown_seconds is None:
+        cooldown_seconds = float(os.environ.get("EVAL_COOLDOWN_SECONDS", "600") or 600)
 
     experiment_id = experiment_id or f"exp-{_dt.datetime.now(_dt.timezone.utc).strftime('%Y%m%d-%H%M%S')}"
     out = os.path.join(results_root, experiment_id)
@@ -252,9 +257,19 @@ def evaluate(config: RepairConfig, limit: Optional[int] = None, only: Optional[S
                                note=f"evaluation cost budget ${config.max_evaluation_cost} reached")
             else:
                 printer(f"\n=== {t.task_id} ({t.source}) ===")
-                model = model_factory() if model_factory else create_model(config.provider, config.model, config.effort, config.server_fallbacks, config.min_seconds_between_calls)
-                state = run_repair(t.task, config, model=model, run_id=f"{experiment_id}-{t.task_id}",
-                                   out_root=os.path.join(out, "runs"), printer=printer)
+                for run_no in range(1, 3):
+                    model = model_factory() if model_factory else create_model(config.provider, config.model, config.effort, config.server_fallbacks, config.min_seconds_between_calls)
+                    suffix = "" if run_no == 1 else f"-retry{run_no - 1}"
+                    state = run_repair(t.task, config, model=model, run_id=f"{experiment_id}-{t.task_id}{suffix}",
+                                       out_root=os.path.join(out, "runs"), printer=printer)
+                    msg = state.final_message or ""
+                    throttled = (state.final_status and state.final_status.value == "LLM_FAILURE"
+                                 and msg.startswith("HTTP 429") and "QUOTA_EXHAUSTED" not in msg)
+                    if not throttled or run_no == 2:
+                        break
+                    # Temporary upstream throttling: wait, then run the task once more from scratch.
+                    printer(f"  temporarily rate-limited; cooling down {cooldown_seconds}s, then retrying this task once")
+                    sleep(cooldown_seconds)
                 hidden: Measured = NOT_MEASURED
                 if state.final_status and state.final_status.value == "ADMITTED":
                     printer("  hidden check: running independent tests on the admitted patch")
@@ -266,7 +281,7 @@ def evaluate(config: RepairConfig, limit: Optional[int] = None, only: Optional[S
                         and re.match(r"HTTP (400|401|403|404)\b", state.final_message or "")):
                     config_error = f"stopped after a non-retryable provider error: {state.final_message[:200]}"
                     printer("\n  Provider configuration error; remaining tasks are skipped. " + config_error)
-                # An exhausted quota (still 429 after retries, or a per-day quota) fails every later task too.
+                # A per-day quota, or throttling that outlasted the cooldown retry, fails every later task too.
                 elif (state.final_status and state.final_status.value == "LLM_FAILURE"
                         and (state.final_message or "").startswith("HTTP 429")):
                     skip_status = "SKIPPED_QUOTA"

@@ -129,3 +129,21 @@ def test_unexpected_setup_error_fails_only_that_task(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "open_workspace", boom)
     state = run_repair(_task(tmp_path), fx.config(), model=FakeChatModel([]), run_id="s", out_root=str(tmp_path / "o"))
     assert state.final_status == FinalStatus.SETUP_FAILURE and "git clone timed out" in state.final_message
+
+
+def test_temporary_throttling_cools_down_and_retries_the_task(tmp_path):
+    from repair.evaluation import EvalTask, evaluate
+
+    tasks = [EvalTask(task_id=f"t{i}", source="fixture", task=_task(tmp_path / f"r{i}"), ground_truth_files=["calc/rates.py"],
+                      hidden_check=lambda diff: True) for i in range(2)]
+    models = iter([
+        FakeChatModel([RuntimeError("HTTP 429: temporarily rate-limited upstream")]),   # t0, first run
+        FakeChatModel([respond(text="no")] * 3),                                       # t0, retry after cooldown
+        FakeChatModel([respond(text="no")] * 3),                                       # t1
+    ])
+    slept = []
+    summary = evaluate(fx.config(), tasks=tasks, results_root=str(tmp_path / "results"), experiment_id="c",
+                       model_factory=lambda: next(models), printer=lambda line: None,
+                       cooldown_seconds=5, sleep=slept.append)
+    assert slept == [5]
+    assert summary["metrics"]["final_status_breakdown"] == {"NO_PATCH": 2}
