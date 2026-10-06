@@ -138,3 +138,24 @@ def test_openrouter_config_and_daily_cap(monkeypatch):
     with pytest.raises(LLMError, match="QUOTA_EXHAUSTED"):
         _model(handler).complete("s", [Message("user", "x")], [], 100)
     assert len(calls) == 1
+
+
+def test_error_inside_a_200_body_is_retried_then_succeeds():
+    calls = []
+
+    def handler(req):
+        calls.append(1)
+        if len(calls) < 3:
+            return httpx.Response(200, json={"id": "g", "error": {"message": "Upstream error: Service temporarily overloaded",
+                                                                  "code": 503}})
+        return _ok(content="done")
+
+    assert _model(handler).complete("s", [Message("user", "x")], [], 100).text == "done"
+    assert len(calls) == 3
+
+
+def test_persistent_error_inside_a_200_body_becomes_an_http_error():
+    m = _model(lambda req: httpx.Response(200, json={"error": {"message": "overloaded", "code": 503}}))
+    m.max_retries = 2
+    with pytest.raises(LLMError, match="HTTP 503"):
+        m.complete("s", [Message("user", "x")], [], 100)

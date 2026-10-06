@@ -124,9 +124,22 @@ class OpenAICompatChatModel:
                 continue
             if resp.status_code == 200:
                 try:
-                    return resp.json()
+                    data = resp.json()
                 except ValueError:
                     raise LLMError("provider returned a non-JSON response") from None
+                err = data.get("error") if isinstance(data, dict) and not data.get("choices") else None
+                if not err:
+                    return data
+                # OpenRouter reports upstream failures inside a 200 body; treat them like the HTTP status.
+                code = int(err.get("code") or 502) if isinstance(err, dict) else 502
+                text = json.dumps(err)[:300]
+                if code == 429 and _daily_quota_exhausted(text):
+                    raise LLMError(f"HTTP 429 QUOTA_EXHAUSTED: {text}")
+                if code in (429, 500, 502, 503, 504) and attempt < self.max_retries:
+                    self._sleep(delay)
+                    delay = min(delay * 2, 90)
+                    continue
+                raise LLMError(f"HTTP {code}: {text}")
             if resp.status_code == 429 and _daily_quota_exhausted(resp.text):
                 # A per-day quota will not recover within any sensible retry window.
                 raise LLMError(f"HTTP 429 QUOTA_EXHAUSTED: {_quota_summary(resp.text)}")
