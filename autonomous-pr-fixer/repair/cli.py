@@ -134,6 +134,19 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _load_dotenv() -> None:
+    """Read autonomous-pr-fixer/.env (git-ignored) without overriding variables already set."""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if not os.path.isfile(path):
+        return
+    try:
+        from dotenv import load_dotenv
+    except ImportError:  # pragma: no cover - python-dotenv is in requirements.txt
+        return
+    load_dotenv(path, override=False)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
+    _load_dotenv()
     args = build_parser().parse_args(argv)
     return args.func(args)
