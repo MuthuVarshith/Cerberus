@@ -417,3 +417,12 @@ def test_anthropic_refusal_becomes_llm_error():
     model = AnthropicChatModel("claude-sonnet-5-5", client=SimpleNamespace(messages=FakeMessages([resp])))
     with pytest.raises(LLMError, match="refused"):
         model.complete("s", [Message("user", "x")], [], 100)
+
+
+def test_run_test_accepts_test_directories_only(ctx):
+    reg = build_registry()
+    ok = reg.execute(ctx, "run_test", {"target": "tests/"})
+    assert ok.ok and ok.payload["status"] in ("PASSED", "FAILED")
+    assert reg.execute(ctx, "run_test", {"target": "calc/"}).error_code == "INVALID_ARGUMENT"
+    assert reg.execute(ctx, "run_test", {"target": "../tests"}).error_code == PERMISSION_DENIED
+    assert reg.execute(ctx, "run_test", {"target": "nope/tests"}).error_code == "NOT_FOUND"

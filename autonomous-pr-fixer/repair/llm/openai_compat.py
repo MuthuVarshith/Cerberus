@@ -70,7 +70,7 @@ def _quota_summary(text: str) -> str:
 
 class OpenAICompatChatModel:
     def __init__(self, model: str, base_url: str, api_key_env: str, client: Optional[httpx.Client] = None,
-                 reasoning_effort: Optional[str] = None, min_interval: float = 0.0, max_retries: int = 6,
+                 reasoning_effort: Optional[str] = None, min_interval: float = 0.0, max_retries: Optional[int] = None,
                  timeout: float = 180.0, api_key: Optional[str] = None):
         self.model = model
         self.base_url = base_url.rstrip("/")
@@ -81,7 +81,7 @@ class OpenAICompatChatModel:
         self._client = client or httpx.Client(timeout=timeout)
         self.reasoning_effort = reasoning_effort
         self.min_interval = min_interval
-        self.max_retries = max_retries
+        self.max_retries = max_retries if max_retries is not None else int(os.environ.get("LLM_MAX_RETRIES", "6") or 6)
         self._last_call = 0.0
         self._sleep = time.sleep
 
