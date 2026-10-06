@@ -22,6 +22,7 @@ import httpx
 from repair.llm.provider import LLMError, Message, ModelResponse, ToolCall, ToolSpec, Usage
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 _DROP_KEYS = {"title", "default", "examples", "$schema"}
 
@@ -55,7 +56,9 @@ def _quota_ids(text: str) -> List[str]:
 
 
 def _daily_quota_exhausted(text: str) -> bool:
-    return any("PerDay" in q for q in _quota_ids(text))
+    if any("PerDay" in q for q in _quota_ids(text)):          # Google AI Studio
+        return True
+    return "free-models-per-day" in text                      # OpenRouter free-model daily cap
 
 
 def _quota_summary(text: str) -> str:

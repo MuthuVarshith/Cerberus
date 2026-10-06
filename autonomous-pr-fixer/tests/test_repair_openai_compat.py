@@ -115,3 +115,26 @@ def test_daily_quota_is_not_retried_and_is_named():
         _model(handler).complete("s", [Message("user", "x")], [], 100)
     assert len(calls) == 1
     assert "QUOTA_EXHAUSTED" in str(exc.value) and "GenerateRequestsPerDayPerProjectPerModel-FreeTier=20" in str(exc.value)
+
+
+def test_openrouter_config_and_daily_cap(monkeypatch):
+    for k in ("LLM_MODEL", "LLM_INPUT_PRICE_PER_MTOK", "LLM_OUTPUT_PRICE_PER_MTOK", "LLM_FREE_TIER",
+              "LLM_MIN_SECONDS_BETWEEN_CALLS"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    cfg = RepairConfig.from_env()
+    assert cfg.model == "qwen/qwen3-coder:free" and cfg.min_seconds_between_calls == 4.0 and cfg.input_price_per_mtok == 0.0
+    monkeypatch.setenv("LLM_MODEL", "openai/gpt-5")
+    assert RepairConfig.from_env().input_price_per_mtok is None   # paid model: no fake $0
+    monkeypatch.setenv("OPENROUTER_API_KEY", KEY)
+    m = create_model("openrouter", "qwen/qwen3-coder:free")
+    assert m.base_url == "https://openrouter.ai/api/v1"
+    calls = []
+
+    def handler(req):
+        calls.append(1)
+        return httpx.Response(429, text='{"error": {"message": "Rate limit exceeded: free-models-per-day"}}')
+
+    with pytest.raises(LLMError, match="QUOTA_EXHAUSTED"):
+        _model(handler).complete("s", [Message("user", "x")], [], 100)
+    assert len(calls) == 1

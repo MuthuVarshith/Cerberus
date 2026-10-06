@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL = "claude-sonnet-5-5"
-DEFAULT_MODELS = {"anthropic": "claude-sonnet-5-5", "gemini": "gemini-3.8-flash"}
+DEFAULT_MODELS = {"anthropic": "claude-sonnet-5-5", "gemini": "gemini-3.8-flash", "openrouter": "qwen/qwen3-coder:free"}
+MIN_INTERVAL = {"gemini": 6.0, "openrouter": 4.0}   # free tiers: ~10 and ~20 requests per minute
 
 
 def _env(name: str, default: str) -> str:
@@ -53,7 +54,10 @@ class RepairConfig(BaseModel):
     @classmethod
     def from_env(cls, **overrides) -> "RepairConfig":
         provider = _env("LLM_PROVIDER", DEFAULT_PROVIDER).lower()
-        free_gemini = provider == "gemini" and _env("LLM_FREE_TIER", "true").lower() not in ("0", "false", "no")
+        model = _env("LLM_MODEL", DEFAULT_MODELS.get(provider, DEFAULT_MODEL))
+        free_flag = _env("LLM_FREE_TIER", "true").lower() not in ("0", "false", "no")
+        # Google AI Studio's free tier and OpenRouter ':free' models are not billed.
+        free_gemini = free_flag and (provider == "gemini" or (provider == "openrouter" and model.endswith(":free")))
 
         def _price(name: str) -> Optional[float]:
             raw = os.environ.get(name, "").strip()
@@ -66,8 +70,8 @@ class RepairConfig(BaseModel):
 
         values = dict(
             provider=provider,
-            model=_env("LLM_MODEL", DEFAULT_MODELS.get(provider, DEFAULT_MODEL)),
-            min_seconds_between_calls=_env_float("LLM_MIN_SECONDS_BETWEEN_CALLS", 6.0 if provider == "gemini" else 0.0),
+            model=model,
+            min_seconds_between_calls=_env_float("LLM_MIN_SECONDS_BETWEEN_CALLS", MIN_INTERVAL.get(provider, 0.0)),
             input_price_per_mtok=_price("LLM_INPUT_PRICE_PER_MTOK"),
             output_price_per_mtok=_price("LLM_OUTPUT_PRICE_PER_MTOK"),
             max_attempts=_env_int("MAX_ATTEMPTS", 3),

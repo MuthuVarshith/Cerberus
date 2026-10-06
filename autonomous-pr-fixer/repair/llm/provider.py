@@ -101,4 +101,7 @@ def create_model(provider: str, model: str, effort: Optional[str] = None, server
         from repair.llm.openai_compat import GEMINI_BASE_URL, OpenAICompatChatModel
         key_env = "GEMINI_API_KEY" if os.environ.get("GEMINI_API_KEY") else "GOOGLE_API_KEY"
         return OpenAICompatChatModel(model, GEMINI_BASE_URL, key_env, reasoning_effort=effort, min_interval=min_interval)
-    raise LLMError(f"Unsupported LLM_PROVIDER '{provider}'. Supported: anthropic, gemini.")
+    if provider == "openrouter":
+        from repair.llm.openai_compat import OPENROUTER_BASE_URL, OpenAICompatChatModel
+        return OpenAICompatChatModel(model, OPENROUTER_BASE_URL, "OPENROUTER_API_KEY", min_interval=min_interval)
+    raise LLMError(f"Unsupported LLM_PROVIDER '{provider}'. Supported: anthropic, gemini, openrouter.")
