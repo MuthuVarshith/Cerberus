@@ -239,9 +239,10 @@ def evaluate(config: RepairConfig, limit: Optional[int] = None, only: Optional[S
         results: List[TaskResult] = []
         spent = 0.0
         config_error = ""
+        skip_status = "SKIPPED_CONFIG_ERROR"
         for t in tasks:
             if config_error:
-                r = TaskResult(task_id=t.task_id, final_status="SKIPPED_CONFIG_ERROR", admitted=False, attempts=0,
+                r = TaskResult(task_id=t.task_id, final_status=skip_status, admitted=False, attempts=0,
                                duration_seconds=0, input_tokens=0, output_tokens=0, total_tokens=0, cost_usd=0.0,
                                tool_calls=0, ground_truth_files=t.ground_truth_files, note=config_error)
             elif spent >= config.max_evaluation_cost:
@@ -265,6 +266,12 @@ def evaluate(config: RepairConfig, limit: Optional[int] = None, only: Optional[S
                         and re.match(r"HTTP (400|401|403|404)\b", state.final_message or "")):
                     config_error = f"stopped after a non-retryable provider error: {state.final_message[:200]}"
                     printer("\n  Provider configuration error; remaining tasks are skipped. " + config_error)
+                # An exhausted quota (still 429 after retries, or a per-day quota) fails every later task too.
+                elif (state.final_status and state.final_status.value == "LLM_FAILURE"
+                        and (state.final_message or "").startswith("HTTP 429")):
+                    skip_status = "SKIPPED_QUOTA"
+                    config_error = f"stopped: provider quota exhausted ({state.final_message[:200]})"
+                    printer("\n  Provider quota exhausted; remaining tasks are skipped. Re-run them later with --only.")
             results.append(r)
             with open(os.path.join(out, "task-results.jsonl"), "a", encoding="utf-8") as f:
                 f.write(r.model_dump_json() + "\n")

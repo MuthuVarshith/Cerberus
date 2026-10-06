@@ -101,3 +101,17 @@ def test_gemini_config_defaults(monkeypatch):
     assert cfg.input_price_per_mtok == 0.0 and cfg.output_price_per_mtok == 0.0
     monkeypatch.setenv("LLM_FREE_TIER", "false")
     assert RepairConfig.from_env().input_price_per_mtok is None
+
+
+def test_daily_quota_is_not_retried_and_is_named():
+    calls = []
+    body = '{"error": {"code": 429, "details": [{"violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier", "quotaValue": "20"}]}, {"retryDelay": "30s"}]}}'
+
+    def handler(req):
+        calls.append(1)
+        return httpx.Response(429, text=body)
+
+    with pytest.raises(LLMError) as exc:
+        _model(handler).complete("s", [Message("user", "x")], [], 100)
+    assert len(calls) == 1
+    assert "QUOTA_EXHAUSTED" in str(exc.value) and "GenerateRequestsPerDayPerProjectPerModel-FreeTier=20" in str(exc.value)

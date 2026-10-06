@@ -50,6 +50,21 @@ def sanitize_schema(schema: Any) -> Any:
     return walk(schema)
 
 
+def _quota_ids(text: str) -> List[str]:
+    return re.findall(r'"quotaId":\s*"([^"]+)"', text)
+
+
+def _daily_quota_exhausted(text: str) -> bool:
+    return any("PerDay" in q for q in _quota_ids(text))
+
+
+def _quota_summary(text: str) -> str:
+    ids = _quota_ids(text)
+    values = re.findall(r'"quotaValue":\s*"([^"]+)"', text)
+    parts = [f"{q}={v}" for q, v in zip(ids, values)] or ids
+    return ", ".join(parts) if parts else text[:300]
+
+
 class OpenAICompatChatModel:
     def __init__(self, model: str, base_url: str, api_key_env: str, client: Optional[httpx.Client] = None,
                  reasoning_effort: Optional[str] = None, min_interval: float = 0.0, max_retries: int = 6,
@@ -109,6 +124,9 @@ class OpenAICompatChatModel:
                     return resp.json()
                 except ValueError:
                     raise LLMError("provider returned a non-JSON response") from None
+            if resp.status_code == 429 and _daily_quota_exhausted(resp.text):
+                # A per-day quota will not recover within any sensible retry window.
+                raise LLMError(f"HTTP 429 QUOTA_EXHAUSTED: {_quota_summary(resp.text)}")
             if resp.status_code in (429, 500, 502, 503, 504) and attempt < self.max_retries:
                 retry_after = resp.headers.get("retry-after")
                 hinted = None
@@ -124,7 +142,8 @@ class OpenAICompatChatModel:
                 delay = min(delay * 2, 90)
                 continue
             # Never echo request headers; the body of an error response contains no credentials.
-            raise LLMError(f"HTTP {resp.status_code}: {resp.text[:300]}")
+            detail = _quota_summary(resp.text) if resp.status_code == 429 else resp.text[:300]
+            raise LLMError(f"HTTP {resp.status_code}: {detail}")
         raise LLMError("retries exhausted")
 
     def complete(self, system: str, messages: List[Message], tools: List[ToolSpec], max_tokens: int) -> ModelResponse:

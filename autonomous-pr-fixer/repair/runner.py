@@ -49,7 +49,8 @@ def run_repair(task: RepairTask, config: RepairConfig, model: Optional[ChatModel
     try:
         sandbox = open_workspace(task.repo_dir, task.reproduction_test, base_ref=task.base_ref,
                                  isolation=config.isolation, timeout_sec=config.tool_timeout_seconds)
-    except (WorkspaceError, SandboxError) as exc:
+    except Exception as exc:  # workspace errors, sandbox errors, git timeouts: this task fails, the caller continues
+        exc = exc if isinstance(exc, (WorkspaceError, SandboxError)) else RuntimeError(f"{type(exc).__name__}: {exc}")
         state.final_status = FinalStatus.SETUP_FAILURE
         state.final_message = str(exc)[:500]
         os.makedirs(out_dir, exist_ok=True)

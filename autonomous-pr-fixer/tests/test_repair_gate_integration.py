@@ -107,3 +107,25 @@ def test_evaluation_stops_after_a_non_retryable_provider_error(tmp_path):
                        model_factory=lambda: FakeChatModel([RuntimeError("HTTP 404: model not available")]),
                        printer=lambda line: None)
     assert summary["metrics"]["final_status_breakdown"] == {"LLM_FAILURE": 1, "SKIPPED_CONFIG_ERROR": 1}
+
+
+def test_evaluation_stops_when_the_quota_is_exhausted(tmp_path):
+    from repair.evaluation import EvalTask, evaluate
+
+    tasks = [EvalTask(task_id=f"t{i}", source="fixture", task=_task(tmp_path / f"r{i}"), ground_truth_files=["calc/rates.py"],
+                      hidden_check=lambda diff: True) for i in range(3)]
+    summary = evaluate(fx.config(), tasks=tasks, results_root=str(tmp_path / "results"), experiment_id="q",
+                       model_factory=lambda: FakeChatModel([RuntimeError("HTTP 429 QUOTA_EXHAUSTED: PerDay=20")]),
+                       printer=lambda line: None)
+    assert summary["metrics"]["final_status_breakdown"] == {"LLM_FAILURE": 1, "SKIPPED_QUOTA": 2}
+
+
+def test_unexpected_setup_error_fails_only_that_task(tmp_path, monkeypatch):
+    import repair.runner as runner
+
+    def boom(*a, **k):
+        raise TimeoutError("git clone timed out")
+
+    monkeypatch.setattr(runner, "open_workspace", boom)
+    state = run_repair(_task(tmp_path), fx.config(), model=FakeChatModel([]), run_id="s", out_root=str(tmp_path / "o"))
+    assert state.final_status == FinalStatus.SETUP_FAILURE and "git clone timed out" in state.final_message
