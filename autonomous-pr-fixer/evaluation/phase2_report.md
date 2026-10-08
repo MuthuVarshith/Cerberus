@@ -83,13 +83,15 @@ over 150 lines and for unparseable files). BM25: Okapi, k1 = 1.2, b = 0.75, iden
 and split on snake_case / camelCase, path and symbol name indexed with each chunk. File score: either
 the best chunk (`bm25`) or the sum of the file's three best chunks (`bm25-sum3`). Cerberus `d3620df`.
 
-| Method | R@1 | R@5 | R@10 | All@10 | MRR | Gold never ranked | Median query time |
+| Method | R@1 | R@5 | R@10 | All@10 | MRR | Gold never ranked | Median time per instance |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Phase 1 localizer | 0.171 | 0.355 | 0.487 | 0.467 | 0.288 | 40 | 11.1 s |
-| BM25, best chunk | 0.354 | 0.650 | 0.776 | 0.742 | 0.531 | 0 | see JSON |
-| BM25, sum of top 3 | 0.435 | 0.741 | 0.864 | 0.842 | 0.600 | 0 | see JSON |
+| Phase 1 localizer | 0.171 | 0.355 | 0.487 | 0.467 | 0.288 | 40 | 11.1 s (ranking) |
+| BM25, best chunk | 0.354 | 0.650 | 0.776 | 0.742 | 0.531 | 0 | 2.0 s (chunk 0.86 + index 1.18 + query 0.019) |
+| BM25, sum of top 3 | 0.435 | 0.741 | 0.864 | 0.842 | 0.600 | 0 | 3.5 s (chunk 1.53 + index 1.99 + query 0.031) |
 
-Per-instance results: `localization/results/{phase1-baseline,bm25,bm25-sum3}.json`.
+Median of 9,875 chunks per instance. The two BM25 runs differ only in aggregation; their different
+chunk/index times reflect machine load during the runs, not the method. Per-instance results:
+`localization/results/{phase1-baseline,bm25,bm25-sum3}.json`.
 
 ### Paired significance
 
