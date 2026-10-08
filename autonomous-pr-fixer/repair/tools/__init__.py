@@ -9,6 +9,7 @@ from repair.tools.base import Tool, ToolContext, ToolRegistry  # noqa: F401
 from repair.tools.files import ReadFile, ReadTest
 from repair.tools.git import GitDiff, GitStatus
 from repair.tools.patch import ApplyPatch, EditFile, ResetWorkspace
+from repair.tools.retrieve import RetrieveCode
 from repair.tools.search import FindReferences, FindSymbol, SearchCode
 from repair.tools.tests import RunTest
 
@@ -32,10 +33,11 @@ class SubmitPatch(Tool):
         raise RuntimeError("submit_patch is handled by the agent loop")
 
 
-def default_tools() -> List[Tool]:
-    return [SearchCode(), ReadFile(), FindSymbol(), FindReferences(), ReadTest(), RunTest(),
+def default_tools(retrieval: bool = False) -> List[Tool]:
+    extra: List[Tool] = [RetrieveCode()] if retrieval else []
+    return extra + [SearchCode(), ReadFile(), FindSymbol(), FindReferences(), ReadTest(), RunTest(),
             GitStatus(), GitDiff(), EditFile(), ApplyPatch(), ResetWorkspace(), SubmitPatch()]
 
 
-def build_registry(allowed: Optional[Set[str]] = None) -> ToolRegistry:
-    return ToolRegistry(default_tools(), allowed=allowed)
+def build_registry(allowed: Optional[Set[str]] = None, retrieval: bool = False) -> ToolRegistry:
+    return ToolRegistry(default_tools(retrieval), allowed=allowed)

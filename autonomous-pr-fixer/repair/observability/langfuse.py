@@ -60,6 +60,7 @@ class Tracer(Protocol):
     def generation(self, name: str, model: str, input_tokens: int, output_tokens: int, cost: Optional[float],
                    latency_seconds: float, metadata: Dict[str, Any], error: Optional[str] = None) -> None: ...
     def tool(self, name: str, arguments: Dict[str, Any], ok: bool, duration_seconds: float, metadata: Dict[str, Any]) -> None: ...
+    def retrieval(self, query: str, top_files: List[str], latency_seconds: float, metadata: Dict[str, Any]) -> None: ...
     def verification(self, attempt: int, status: str, failure_code: Optional[str], duration_seconds: float,
                      metadata: Dict[str, Any]) -> None: ...
     def end_run(self, final_status: str, metadata: Dict[str, Any]) -> None: ...
@@ -71,6 +72,7 @@ class NoopTracer:
     def start_run(self, run_id, metadata): pass
     def generation(self, name, model, input_tokens, output_tokens, cost, latency_seconds, metadata, error=None): pass
     def tool(self, name, arguments, ok, duration_seconds, metadata): pass
+    def retrieval(self, query, top_files, latency_seconds, metadata): pass
     def verification(self, attempt, status, failure_code, duration_seconds, metadata): pass
     def end_run(self, final_status, metadata): pass
 
@@ -95,6 +97,9 @@ class RecordingTracer:
 
     def tool(self, name, arguments, ok, duration_seconds, metadata):
         self._add("tool", name=name, arguments=arguments, ok=ok, duration_seconds=duration_seconds, metadata=metadata)
+
+    def retrieval(self, query, top_files, latency_seconds, metadata):
+        self._add("retrieval", query=query, top_files=top_files, latency_seconds=latency_seconds, metadata=metadata)
 
     def verification(self, attempt, status, failure_code, duration_seconds, metadata):
         self._add("verification", attempt=attempt, status=status, failure_code=failure_code,
@@ -146,6 +151,11 @@ class LangfuseTracer:
         self._child(f"tool:{name}", "tool", input=redact(arguments),
                     metadata=redact({**metadata, "duration_seconds": duration_seconds}),
                     level=None if ok else "WARNING")
+
+    def retrieval(self, query, top_files, latency_seconds, metadata):
+        self._child("retrieve_code", "retriever", input=redact({"query": query[:500]}),
+                    output={"top_files": top_files[:10]},
+                    metadata=redact({**metadata, "latency_seconds": round(latency_seconds, 3)}))
 
     def verification(self, attempt, status, failure_code, duration_seconds, metadata):
         self._child("cerberus-verification", "chain",

@@ -27,6 +27,7 @@ def _config(args: argparse.Namespace) -> RepairConfig:
     return RepairConfig.from_env(
         model=getattr(args, "model", None),
         max_attempts=getattr(args, "max_attempts", None),
+        retrieval=None if getattr(args, "retrieval", None) in (None, "none") else args.retrieval,
         isolation=ISOLATION_HOST_UNSAFE if getattr(args, "unsafe_local_sandbox", False) else None,
     )
 
@@ -105,6 +106,8 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--provider", choices=["anthropic", "gemini", "openrouter"], help="Default: LLM_PROVIDER or anthropic")
         sp.add_argument("--model", help="Model id (default: LLM_MODEL, else gemini-3.8-flash / claude-sonnet-5-5)")
         sp.add_argument("--max-attempts", type=int, help="Gate submissions (default: MAX_ATTEMPTS or 3)")
+        sp.add_argument("--retrieval", choices=["none", "bm25", "hybrid-bge-small", "hybrid-jina-code"],
+                        help="Offer the retrieve_code tool with this retriever (default: RETRIEVAL or none)")
         sp.add_argument("--unsafe-local-sandbox", action="store_true",
                         help="Run repository code on the host (trusted fixtures only)")
 

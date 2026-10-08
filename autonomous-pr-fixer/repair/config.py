@@ -31,6 +31,19 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+RETRIEVAL_KINDS = ("bm25", "hybrid-bge-small", "hybrid-jina-code")
+
+
+def _retrieval_env() -> Optional[str]:
+    """RETRIEVAL=none|bm25|hybrid-bge-small|hybrid-jina-code; unset or 'none' keeps Phase 1 tools only."""
+    value = _env("RETRIEVAL", "none").lower()
+    if value == "none":
+        return None
+    if value not in RETRIEVAL_KINDS:
+        raise ValueError(f"RETRIEVAL must be none or one of {RETRIEVAL_KINDS}, not {value!r}")
+    return value
+
+
 class RepairConfig(BaseModel):
     provider: str = DEFAULT_PROVIDER
     model: str = DEFAULT_MODEL
@@ -47,6 +60,7 @@ class RepairConfig(BaseModel):
     max_tool_output_chars: int = Field(12_000, ge=500)
     max_text_only_turns: int = Field(3, ge=1, description="Consecutive replies without a tool call before giving up")
     isolation: Optional[str] = None  # None -> Cerberus default (docker)
+    retrieval: Optional[str] = Field(None, description="None (Phase 1 tools only), bm25, hybrid-bge-small, hybrid-jina-code")
     min_seconds_between_calls: float = Field(0.0, ge=0, description="Client-side spacing for rate-limited (free) tiers")
     input_price_per_mtok: Optional[float] = Field(None, ge=0, description="Overrides the built-in price table (USD)")
     output_price_per_mtok: Optional[float] = Field(None, ge=0)
@@ -74,6 +88,7 @@ class RepairConfig(BaseModel):
             min_seconds_between_calls=_env_float("LLM_MIN_SECONDS_BETWEEN_CALLS", MIN_INTERVAL.get(provider, 0.0)),
             input_price_per_mtok=_price("LLM_INPUT_PRICE_PER_MTOK"),
             output_price_per_mtok=_price("LLM_OUTPUT_PRICE_PER_MTOK"),
+            retrieval=_retrieval_env(),
             max_attempts=_env_int("MAX_ATTEMPTS", 3),
             max_tool_calls=_env_int("MAX_TOOL_CALLS", 50),
             max_agent_tokens=_env_int("MAX_AGENT_TOKENS", 400_000),

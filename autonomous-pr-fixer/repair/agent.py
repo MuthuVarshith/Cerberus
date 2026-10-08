@@ -60,11 +60,12 @@ class RepairAgent:
         self.sandbox = sandbox
         self.config = config
         self.tracer = tracer or NoopTracer()
-        self.registry = registry or build_registry()
+        self.registry = registry or build_registry(retrieval=bool(config.retrieval))
         self.print = printer or (lambda _line: None)
         self.out_dir = out_dir
         self.ctx = ToolContext(sandbox=sandbox, timeout_seconds=config.tool_timeout_seconds,
-                               max_output_chars=config.max_tool_output_chars)
+                               max_output_chars=config.max_tool_output_chars,
+                               retrieval_kind=config.retrieval)
 
     # ------------------------------------------------------------------ limits
 
@@ -237,6 +238,10 @@ class RepairAgent:
                           {"error_code": outcome.error_code, "output_chars": len(text)})
                     _log(state, "tool", tool_name=call.name, tool_duration=outcome.duration_seconds,
                          ok=outcome.ok, failure_code=outcome.error_code)
+                    if call.name == "retrieve_code" and outcome.ok:
+                        _safe(self.tracer.retrieval, str((call.arguments or {}).get("query", "")),
+                              list(outcome.payload.get("files", [])), float(outcome.payload.get("latency_seconds", 0.0)),
+                              {"retriever": outcome.payload.get("retriever"), "k": len(outcome.payload.get("results", []))})
                     self.print(f"  tool {call.name}{'' if outcome.ok else ' -> ' + str(outcome.error_code)}")
                     results.append(ToolResult(call.id, text, is_error=not outcome.ok))
                 messages.append(Message("user", tool_results=results))
@@ -244,6 +249,8 @@ class RepairAgent:
             status, message = FinalStatus.ERROR, f"{type(exc).__name__}: {str(exc)[:500]}"
             logger.exception("repair run failed")
 
+        if self.ctx._retriever is not None:
+            _safe(self.ctx._retriever.close)
         state.final_status = status
         state.final_message = message
         state.candidate_files = list(dict.fromkeys(self.ctx.files_read + self.ctx.files_edited))

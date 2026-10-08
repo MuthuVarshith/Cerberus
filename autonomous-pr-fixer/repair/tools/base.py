@@ -96,7 +96,17 @@ class ToolContext:
     files_edited: List[str] = field(default_factory=list)
     tests_seen: List[str] = field(default_factory=list)
     reproduction_runs: List[bool] = field(default_factory=list)  # outcomes of agent runs of the reproduction test
+    retrieval_kind: Optional[str] = None  # None: retrieve_code is not offered (Phase 1 behaviour)
     _index: Any = None
+    _retriever: Any = None
+
+    def retriever(self) -> Any:
+        from repair.retrieval.service import WorkspaceRetriever
+        if self._retriever is None:
+            self._retriever = WorkspaceRetriever(self.sandbox.workspace_dir, getattr(self.sandbox, "base_commit", None),
+                                                 kind=self.retrieval_kind or "bm25")
+            self._retriever.build()
+        return self._retriever
 
     def note(self, bucket: List[str], item: str) -> None:
         if item not in bucket:
