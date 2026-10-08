@@ -156,3 +156,49 @@ def test_file_aggregation_max_and_sum_top3():
     assert files_from_chunks(scored, "sum_top3") == ["b.py", "a.py", "c.py"]
     with pytest.raises(ValueError):
         files_from_chunks(scored, "median")
+
+
+# ------------------------------------------------------------------ fusion and vector search
+
+import numpy as np  # noqa: E402
+
+from repair.retrieval.fusion import rrf  # noqa: E402
+from repair.retrieval.vector import VectorIndex  # noqa: E402
+
+
+def test_rrf_combines_ranks_and_breaks_ties_deterministically():
+    assert rrf([["a", "b", "c"], ["b", "a", "d"]])[:2] in (["a", "b"], ["b", "a"])
+    assert rrf([["a", "b", "c"], ["b", "a", "d"]]) == rrf([["a", "b", "c"], ["b", "a", "d"]])
+    fused = rrf([["x", "y"], ["y", "z"]])
+    assert fused[0] == "y" and set(fused) == {"x", "y", "z"}
+    assert rrf([["a"], ["b"]], weights=[2.0, 1.0])[0] == "a"
+    with pytest.raises(ValueError):
+        rrf([["a"]], weights=[1.0, 2.0])
+
+
+class FakeCache:
+    """Deterministic 3-d vectors keyed on keywords; no model download."""
+    misses = 0
+
+    @staticmethod
+    def _vec(text):
+        t = text.lower()
+        return np.array([("parse" in t) * 1.0, ("render" in t) * 1.0, 0.1], dtype=np.float32)
+
+    def embed_documents(self, texts):
+        return np.stack([self._vec(t) for t in texts])
+
+    def embed_query(self, text):
+        return self._vec(text)
+
+
+def test_vector_index_returns_nearest_chunks_by_cosine():
+    chunks = [Chunk("p.py", "parse", "function", 1, 2, "def parse(): ..."),
+              Chunk("r.py", "render", "function", 1, 2, "def render(): ..."),
+              Chunk("o.py", "other", "function", 1, 2, "def other(): ...")]
+    index = VectorIndex(chunks, FakeCache())  # type: ignore[arg-type]
+    try:
+        hits = index.search("the render step breaks", k=3)
+        assert hits[0][0].path == "r.py" and len(hits) == 3 and index.dim == 3
+    finally:
+        index.close()
