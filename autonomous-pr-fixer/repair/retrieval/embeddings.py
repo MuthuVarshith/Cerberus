@@ -65,15 +65,15 @@ class EmbeddingCache:
             model = _model(self.model_name)
             # Commit every SAVE_EVERY vectors so a long run interrupted midway resumes from the cache.
             for s in range(0, len(missing), SAVE_EVERY):
-                part = missing[s:s + SAVE_EVERY]
-                vectors = list(model.passage_embed([texts[i] for i in part], batch_size=BATCH))
+                batch_idx = missing[s:s + SAVE_EVERY]
+                vectors = list(model.passage_embed([texts[i] for i in batch_idx], batch_size=BATCH))
                 with self.db:
-                    for i, vec in zip(part, vectors, strict=True):
+                    for i, vec in zip(batch_idx, vectors, strict=True):
                         arr = np.asarray(vec, dtype=np.float32)
                         found[keys[i]] = arr
                         self.db.execute("INSERT OR REPLACE INTO vec VALUES (?, ?)", (keys[i], arr.tobytes()))
                 if self.progress:
-                    self.progress(s + len(part), len(missing))
+                    self.progress(s + len(batch_idx), len(missing))
         return np.stack([found[k] for k in keys]) if keys else np.zeros((0, 0), dtype=np.float32)
 
     def embed_query(self, text: str) -> np.ndarray:
