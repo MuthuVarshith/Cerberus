@@ -1,0 +1,2 @@
+autonomous-pr-fixer/evaluation/localization/*.jsonl text eol=lf
+autonomous-pr-fixer/evaluation/localization/*.json text eol=lf
