@@ -146,7 +146,22 @@ def _load_dotenv() -> None:
     load_dotenv(path, override=False)
 
 
+def _use_project_tempdir() -> None:
+    """Keep sandbox workspaces out of %TEMP%.
+
+    On Windows a temp cleaner deleted a live agent workspace mid-run (files the agent had just
+    read came back NOT_FOUND). Every Sandbox and gate run in this process creates its temporary
+    directories through `tempfile`, so pointing `tempfile.tempdir` at artifacts/tmp moves them
+    without changing harness/. CERBERUS_TMPDIR overrides the location.
+    """
+    root = os.environ.get("CERBERUS_TMPDIR") or os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "artifacts", "tmp")
+    os.makedirs(root, exist_ok=True)
+    tempfile.tempdir = root
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     _load_dotenv()
+    _use_project_tempdir()
     args = build_parser().parse_args(argv)
     return args.func(args)
