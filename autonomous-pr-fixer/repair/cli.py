@@ -103,7 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     def common(sp: argparse.ArgumentParser) -> None:
-        sp.add_argument("--provider", choices=["anthropic", "gemini", "openrouter"], help="Default: LLM_PROVIDER or anthropic")
+        sp.add_argument("--provider", choices=["anthropic", "gemini", "openrouter", "openai-compatible"], help="Default: LLM_PROVIDER or anthropic")
         sp.add_argument("--model", help="Model id (default: LLM_MODEL, else gemini-3.8-flash / claude-sonnet-5-5)")
         sp.add_argument("--max-attempts", type=int, help="Gate submissions (default: MAX_ATTEMPTS or 3)")
         sp.add_argument("--retrieval", choices=["none", "bm25", "hybrid-bge-small", "hybrid-jina-code"],

@@ -107,4 +107,15 @@ def create_model(provider: str, model: str, effort: Optional[str] = None, server
         from repair.llm.openai_compat import OPENROUTER_BASE_URL, OpenAICompatChatModel
         return OpenAICompatChatModel(model, OPENROUTER_BASE_URL, "OPENROUTER_API_KEY", min_interval=min_interval,
                                      temperature=temperature, seed=seed)
-    raise LLMError(f"Unsupported LLM_PROVIDER '{provider}'. Supported: anthropic, gemini, openrouter.")
+    if provider == "openai-compatible":
+        # Any OpenAI-style chat-completions endpoint (e.g. Groq, Cerebras, Together, Mistral, DeepSeek):
+        # LLM_BASE_URL is the API root (".../v1"), the key is read from LLM_API_KEY.
+        import os
+        from repair.llm.openai_compat import OpenAICompatChatModel
+        base_url = os.environ.get("LLM_BASE_URL", "").strip()
+        if not base_url.startswith("https://"):
+            raise LLMError("LLM_PROVIDER=openai-compatible needs LLM_BASE_URL (https://...) to be set.")
+        return OpenAICompatChatModel(model, base_url, "LLM_API_KEY", min_interval=min_interval,
+                                     temperature=temperature, seed=seed)
+    raise LLMError(f"Unsupported LLM_PROVIDER '{provider}'. "
+                   "Supported: anthropic, gemini, openrouter, openai-compatible.")

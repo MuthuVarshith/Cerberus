@@ -174,3 +174,16 @@ def test_temperature_and_seed_are_sent_only_when_configured():
     m.temperature, m.seed = 0.0, 7
     m.complete("s", [Message("user", "x")], [], 100)
     assert seen[1]["temperature"] == 0.0 and seen[1]["seed"] == 7
+
+
+def test_generic_openai_compatible_provider(monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", KEY)
+    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    with pytest.raises(LLMError, match="LLM_BASE_URL"):
+        create_model("openai-compatible", "some-model")
+    monkeypatch.setenv("LLM_BASE_URL", "http://insecure.example/v1")
+    with pytest.raises(LLMError, match="https"):
+        create_model("openai-compatible", "some-model")
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.example.com/v1/")
+    m = create_model("openai-compatible", "some-model")
+    assert m.base_url == "https://api.example.com/v1" and m.model == "some-model"
