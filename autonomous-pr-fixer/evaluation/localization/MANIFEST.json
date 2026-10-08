@@ -1,0 +1,24 @@
+{
+  "benchmark": "cerberus-localization-v1",
+  "source": "princeton-nlp/SWE-bench_Verified (test split, 500 instances)",
+  "source_sha256": "a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd",
+  "seed": 20261008,
+  "instances": 120,
+  "eligible": 500,
+  "per_repo": {
+    "astropy/astropy": 5,
+    "django/django": 53,
+    "matplotlib/matplotlib": 8,
+    "mwaskom/seaborn": 2,
+    "pallets/flask": 1,
+    "psf/requests": 2,
+    "pydata/xarray": 5,
+    "pylint-dev/pylint": 2,
+    "pytest-dev/pytest": 5,
+    "scikit-learn/scikit-learn": 8,
+    "sphinx-doc/sphinx": 11,
+    "sympy/sympy": 18
+  },
+  "mentions_gold_path": 34,
+  "instances_sha256": "10632f2b79c4f1d3f1fec240daab1cd66f2b08eabdfbd21f709a24a06b08c1ea"
+}

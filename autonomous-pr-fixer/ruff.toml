@@ -1,0 +1,7 @@
+# Lint configuration. Enforced on Phase 2 code (repair/retrieval, evaluation/localization and their
+# tests); older modules are not yet held to it.
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B"]
