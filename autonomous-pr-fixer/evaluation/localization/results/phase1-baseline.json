@@ -1,0 +1,4408 @@
+{
+  "method": "phase1",
+  "benchmark": "cerberus-localization-v1",
+  "cerberus_commit": "cbaaa392b4a3a069b001732cb6f19a4e9a384aaa",
+  "run_utc": "2026-10-08T10:06:25.927916+00:00",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "python": "3.13.0",
+  "overall": {
+    "n": 120,
+    "recall": {
+      "1": 0.1708,
+      "5": 0.3546,
+      "10": 0.4875
+    },
+    "all_found": {
+      "1": 0.1583,
+      "5": 0.3417,
+      "10": 0.4667
+    },
+    "mrr": 0.2876,
+    "not_ranked": 40
+  },
+  "issue_names_gold_file": {
+    "n": 34,
+    "recall": {
+      "1": 0.3529,
+      "5": 0.5161,
+      "10": 0.6543
+    },
+    "all_found": {
+      "1": 0.3529,
+      "5": 0.5,
+      "10": 0.6176
+    },
+    "mrr": 0.4822,
+    "not_ranked": 3
+  },
+  "issue_does_not_name_gold_file": {
+    "n": 86,
+    "recall": {
+      "1": 0.0988,
+      "5": 0.2907,
+      "10": 0.4215
+    },
+    "all_found": {
+      "1": 0.0814,
+      "5": 0.2791,
+      "10": 0.407
+    },
+    "mrr": 0.2107,
+    "not_ranked": 37
+  },
+  "median_rank_seconds": 11.124,
+  "median_candidate_files": 777.0,
+  "instances": [
+    {
+      "instance_id": "astropy__astropy-13033",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 32,
+      "repo": "astropy/astropy",
+      "gold_files": [
+        "astropy/timeseries/core.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 500,
+      "export_seconds": 0.734,
+      "rank_seconds": 17.011,
+      "top10": [
+        "astropy/timeseries/sampled.py",
+        "astropy/io/ascii/core.py",
+        "astropy/io/fits/column.py",
+        "astropy/table/column.py",
+        "astropy/extern/configobj/configobj.py",
+        "astropy/extern/configobj/validate.py",
+        "astropy/io/fits/header.py",
+        "astropy/table/bst.py",
+        "astropy/table/soco.py",
+        "astropy/table/sorted_array.py"
+      ]
+    },
+    {
+      "instance_id": "astropy__astropy-13453",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.16666666666666666,
+      "first_gold_rank": 6,
+      "ranked": 31,
+      "repo": "astropy/astropy",
+      "gold_files": [
+        "astropy/io/ascii/html.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 503,
+      "export_seconds": 1.622,
+      "rank_seconds": 13.286,
+      "top10": [
+        "astropy/io/fits/column.py",
+        "astropy/io/votable/tree.py",
+        "astropy/table/row.py",
+        "astropy/table/table.py",
+        "astropy/io/votable/converters.py",
+        "astropy/io/ascii/html.py",
+        "astropy/io/fits/fitsrec.py",
+        "astropy/io/fits/header.py",
+        "astropy/table/bst.py",
+        "astropy/table/soco.py"
+      ]
+    },
+    {
+      "instance_id": "astropy__astropy-14096",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 19,
+      "repo": "astropy/astropy",
+      "gold_files": [
+        "astropy/coordinates/sky_coordinate.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 505,
+      "export_seconds": 0.972,
+      "rank_seconds": 14.952,
+      "top10": [
+        "astropy/coordinates/sky_coordinate.py",
+        "astropy/coordinates/attributes.py",
+        "astropy/config/configuration.py",
+        "astropy/logger.py",
+        "astropy/coordinates/baseframe.py",
+        "astropy/__init__.py",
+        "astropy/convolution/kernels.py",
+        "astropy/coordinates/earth.py",
+        "astropy/io/fits/scripts/fitsheader.py",
+        "astropy/coordinates/angles.py"
+      ]
+    },
+    {
+      "instance_id": "astropy__astropy-14309",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.05263157894736842,
+      "first_gold_rank": 19,
+      "ranked": 43,
+      "repo": "astropy/astropy",
+      "gold_files": [
+        "astropy/io/fits/connect.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 510,
+      "export_seconds": 0.937,
+      "rank_seconds": 12.657,
+      "top10": [
+        "astropy/io/fits/header.py",
+        "astropy/table/index.py",
+        "astropy/table/row.py",
+        "astropy/units/quantity.py",
+        "astropy/table/bst.py",
+        "astropy/table/soco.py",
+        "astropy/table/sorted_array.py",
+        "astropy/io/registry/base.py",
+        "astropy/table/table.py",
+        "astropy/io/registry/compat.py"
+      ]
+    },
+    {
+      "instance_id": "astropy__astropy-14598",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.3333333333333333,
+      "first_gold_rank": 3,
+      "ranked": 30,
+      "repo": "astropy/astropy",
+      "gold_files": [
+        "astropy/io/fits/card.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 509,
+      "export_seconds": 0.972,
+      "rank_seconds": 11.945,
+      "top10": [
+        "astropy/io/votable/converters.py",
+        "astropy/units/format/fits.py",
+        "astropy/io/fits/card.py",
+        "astropy/io/votable/tree.py",
+        "astropy/io/fits/header.py",
+        "astropy/logger.py",
+        "astropy/extern/configobj/configobj.py",
+        "astropy/convolution/convolve.py",
+        "astropy/config/configuration.py",
+        "astropy/extern/ply/yacc.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-10880",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.125,
+      "first_gold_rank": 8,
+      "ranked": 29,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/aggregates.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 823,
+      "export_seconds": 1.716,
+      "rank_seconds": 14.015,
+      "top10": [
+        "django/db/models/sql/query.py",
+        "django/views/decorators/http.py",
+        "django/db/models/query.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/gis/geos/mutable_list.py",
+        "django/core/paginator.py",
+        "django/db/models/aggregates.py",
+        "django/db/models/expressions.py",
+        "django/contrib/admin/helpers.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11087",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.05555555555555555,
+      "first_gold_rank": 18,
+      "ranked": 282,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/deletion.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 820,
+      "export_seconds": 1.437,
+      "rank_seconds": 9.591,
+      "top10": [
+        "django/db/migrations/optimizer.py",
+        "django/contrib/auth/models.py",
+        "django/contrib/sessions/backends/base.py",
+        "django/contrib/sessions/backends/cache.py",
+        "django/contrib/sessions/backends/cached_db.py",
+        "django/contrib/sessions/backends/db.py",
+        "django/contrib/sessions/backends/file.py",
+        "django/contrib/sessions/backends/signed_cookies.py",
+        "django/contrib/sites/requests.py",
+        "django/core/cache/backends/base.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11141",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 200,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/migrations/loader.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 825,
+      "export_seconds": 1.465,
+      "rank_seconds": 9.953,
+      "top10": [
+        "django/core/handlers/wsgi.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/query.py",
+        "django/template/defaultfilters.py",
+        "django/core/management/commands/shell.py",
+        "setup.py",
+        "django/conf/global_settings.py",
+        "django/__init__.py",
+        "django/apps/__init__.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11149",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.030303030303030304,
+      "first_gold_rank": 33,
+      "ranked": 39,
+      "repo": "django/django",
+      "gold_files": [
+        "django/contrib/admin/options.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 820,
+      "export_seconds": 1.496,
+      "rank_seconds": 8.868,
+      "top10": [
+        "django/contrib/auth/models.py",
+        "django/db/models/query.py",
+        "django/views/generic/base.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "setup.py",
+        "django/conf/global_settings.py",
+        "django/contrib/admin/models.py",
+        "django/contrib/contenttypes/models.py",
+        "django/contrib/flatpages/models.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11163",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 23,
+      "repo": "django/django",
+      "gold_files": [
+        "django/forms/models.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 820,
+      "export_seconds": 1.476,
+      "rank_seconds": 8.557,
+      "top10": [
+        "django/forms/models.py",
+        "django/contrib/gis/gdal/geometries.py",
+        "django/contrib/gis/geos/geometry.py",
+        "django/db/models/fields/__init__.py",
+        "django/db/models/sql/datastructures.py",
+        "django/utils/datastructures.py",
+        "django/contrib/staticfiles/finders.py",
+        "django/utils/archive.py",
+        "django/contrib/admin/helpers.py",
+        "django/contrib/gis/gdal/feature.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11179",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.058823529411764705,
+      "first_gold_rank": 17,
+      "ranked": 41,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/deletion.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 820,
+      "export_seconds": 1.46,
+      "rank_seconds": 8.632,
+      "top10": [
+        "django/contrib/auth/models.py",
+        "django/contrib/sessions/backends/base.py",
+        "django/contrib/sessions/backends/cache.py",
+        "django/contrib/sessions/backends/cached_db.py",
+        "django/contrib/sessions/backends/db.py",
+        "django/contrib/sessions/backends/file.py",
+        "django/contrib/sessions/backends/signed_cookies.py",
+        "django/contrib/sites/requests.py",
+        "django/core/cache/backends/base.py",
+        "django/core/cache/backends/db.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11206",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.09090909090909091,
+      "first_gold_rank": 11,
+      "ranked": 30,
+      "repo": "django/django",
+      "gold_files": [
+        "django/utils/numberformat.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 820,
+      "export_seconds": 1.403,
+      "rank_seconds": 8.946,
+      "top10": [
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/expressions.py",
+        "django/db/models/query.py",
+        "django/core/validators.py",
+        "django/core/serializers/xml_serializer.py",
+        "django/conf/global_settings.py",
+        "setup.py",
+        "django/shortcuts.py",
+        "django/apps/config.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11239",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 31,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/backends/postgresql/client.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 820,
+      "export_seconds": 1.457,
+      "rank_seconds": 9.258,
+      "top10": [
+        "django/utils/autoreload.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "setup.py",
+        "django/conf/global_settings.py",
+        "django/apps/registry.py",
+        "django/conf/__init__.py",
+        "django/apps/config.py",
+        "django/contrib/gis/db/backends/postgis/adapter.py",
+        "django/contrib/gis/db/backends/spatialite/base.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11265",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.14285714285714285,
+      "first_gold_rank": 7,
+      "ranked": 25,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/sql/query.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 820,
+      "export_seconds": 1.477,
+      "rank_seconds": 8.847,
+      "top10": [
+        "django/core/exceptions.py",
+        "django/db/models/query.py",
+        "django/db/models/query_utils.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/admin/filters.py",
+        "django/db/models/sql/query.py",
+        "setup.py",
+        "django/shortcuts.py",
+        "django/contrib/admin/checks.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11292",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.3333333333333333,
+      "first_gold_rank": 3,
+      "ranked": 16,
+      "repo": "django/django",
+      "gold_files": [
+        "django/core/management/base.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 820,
+      "export_seconds": 1.445,
+      "rank_seconds": 9.287,
+      "top10": [
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/core/management/base.py",
+        "django/conf/global_settings.py",
+        "django/conf/__init__.py",
+        "setup.py",
+        "django/__main__.py",
+        "django/bin/django-admin.py",
+        "django/core/management/__init__.py",
+        "django/contrib/gis/management/commands/inspectdb.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11299",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 32,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/sql/query.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 820,
+      "export_seconds": 1.536,
+      "rank_seconds": 8.899,
+      "top10": [
+        "django/db/models/constraints.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/query.py",
+        "django/template/defaultfilters.py",
+        "django/contrib/gis/gdal/geomtype.py",
+        "django/contrib/admin/options.py",
+        "setup.py",
+        "django/contrib/gis/measure.py",
+        "django/contrib/gis/db/backends/oracle/adapter.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11532",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.2
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.125,
+      "first_gold_rank": 8,
+      "ranked": 31,
+      "repo": "django/django",
+      "gold_files": [
+        "django/core/mail/message.py",
+        "django/core/mail/utils.py",
+        "django/core/validators.py",
+        "django/utils/encoding.py",
+        "django/utils/html.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 823,
+      "export_seconds": 1.478,
+      "rank_seconds": 9.025,
+      "top10": [
+        "django/contrib/messages/context_processors.py",
+        "django/core/exceptions.py",
+        "django/contrib/gis/gdal/feature.py",
+        "django/http/request.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/expressions.py",
+        "django/core/mail/message.py",
+        "django/conf/global_settings.py",
+        "django/apps/config.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11551",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.06666666666666667,
+      "first_gold_rank": 15,
+      "ranked": 32,
+      "repo": "django/django",
+      "gold_files": [
+        "django/contrib/admin/checks.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 823,
+      "export_seconds": 1.403,
+      "rank_seconds": 9.325,
+      "top10": [
+        "django/contrib/admin/helpers.py",
+        "django/contrib/gis/gdal/feature.py",
+        "django/contrib/gis/gdal/layer.py",
+        "django/db/models/options.py",
+        "django/db/models/query.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/template/defaultfilters.py",
+        "django/contrib/gis/gdal/geomtype.py",
+        "django/conf/global_settings.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-11603",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 26,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/aggregates.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 824,
+      "export_seconds": 1.345,
+      "rank_seconds": 8.898,
+      "top10": [
+        "django/db/models/query.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/gis/db/backends/base/features.py",
+        "django/conf/global_settings.py",
+        "django/contrib/admin/options.py",
+        "setup.py",
+        "django/apps/config.py",
+        "django/shortcuts.py",
+        "django/contrib/admin/filters.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-12125",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 22,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/migrations/serializer.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 826,
+      "export_seconds": 1.476,
+      "rank_seconds": 9.917,
+      "top10": [
+        "django/contrib/staticfiles/storage.py",
+        "django/core/files/storage.py",
+        "django/core/management/commands/makemessages.py",
+        "django/db/migrations/writer.py",
+        "django/db/models/fields/files.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/expressions.py",
+        "django/apps/config.py",
+        "django/shortcuts.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-12155",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.09090909090909091,
+      "first_gold_rank": 11,
+      "ranked": 40,
+      "repo": "django/django",
+      "gold_files": [
+        "django/contrib/admindocs/utils.py",
+        "django/contrib/admindocs/views.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 826,
+      "export_seconds": 1.501,
+      "rank_seconds": 8.802,
+      "top10": [
+        "django/views/generic/base.py",
+        "django/db/models/query.py",
+        "django/template/defaultfilters.py",
+        "django/contrib/gis/gdal/geometries.py",
+        "django/contrib/gis/geos/geometry.py",
+        "django/db/models/fields/__init__.py",
+        "django/db/models/sql/datastructures.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/conf/global_settings.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-12262",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 30,
+      "repo": "django/django",
+      "gold_files": [
+        "django/template/library.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 827,
+      "export_seconds": 1.48,
+      "rank_seconds": 9.113,
+      "top10": [
+        "django/template/exceptions.py",
+        "django/template/base.py",
+        "django/template/backends/django.py",
+        "django/template/backends/dummy.py",
+        "django/template/backends/jinja2.py",
+        "django/contrib/messages/storage/base.py",
+        "django/core/checks/registry.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/query.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-12273",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.25,
+      "first_gold_rank": 4,
+      "ranked": 26,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/base.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 827,
+      "export_seconds": 1.603,
+      "rank_seconds": 9.527,
+      "top10": [
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/postgres/fields/ranges.py",
+        "django/contrib/sessions/backends/db.py",
+        "django/db/models/base.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/db/models/query.py",
+        "django/contrib/admin/options.py",
+        "django/shortcuts.py",
+        "django/conf/global_settings.py",
+        "django/apps/config.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-12304",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 29,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/enums.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 827,
+      "export_seconds": 1.526,
+      "rank_seconds": 8.983,
+      "top10": [
+        "django/template/utils.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/query.py",
+        "django/template/defaultfilters.py",
+        "django/contrib/gis/gdal/geomtype.py",
+        "django/contrib/admin/checks.py",
+        "django/conf/global_settings.py",
+        "django/shortcuts.py",
+        "setup.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-12406",
+      "recall": {
+        "1": 0.5,
+        "5": 0.5,
+        "10": 0.5
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 28,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/fields/related.py",
+        "django/forms/models.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 827,
+      "export_seconds": 1.515,
+      "rank_seconds": 9.51,
+      "top10": [
+        "django/forms/models.py",
+        "django/forms/widgets.py",
+        "django/contrib/sessions/backends/base.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/postgres/fields/ranges.py",
+        "django/contrib/sessions/backends/db.py",
+        "django/db/models/base.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/gis/db/backends/mysql/operations.py",
+        "django/contrib/admin/helpers.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-12713",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.5,
+      "first_gold_rank": 2,
+      "ranked": 20,
+      "repo": "django/django",
+      "gold_files": [
+        "django/contrib/admin/options.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 829,
+      "export_seconds": 1.602,
+      "rank_seconds": 10.455,
+      "top10": [
+        "django/forms/widgets.py",
+        "django/contrib/admin/options.py",
+        "django/contrib/auth/admin.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/query.py",
+        "django/template/defaultfilters.py",
+        "django/contrib/gis/gdal/libgdal.py",
+        "django/contrib/admin/helpers.py",
+        "django/shortcuts.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13023",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 28,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/fields/__init__.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 842,
+      "export_seconds": 2.019,
+      "rank_seconds": 9.992,
+      "top10": [
+        "django/core/exceptions.py",
+        "django/utils/datastructures.py",
+        "django/contrib/sessions/backends/base.py",
+        "django/db/models/enums.py",
+        "django/db/models/query.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/admin/filters.py",
+        "django/contrib/gis/gdal/field.py",
+        "django/db/models/expressions.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13033",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 34,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/sql/compiler.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 842,
+      "export_seconds": 1.176,
+      "rank_seconds": 11.495,
+      "top10": [
+        "django/contrib/gis/gdal/field.py",
+        "django/db/models/expressions.py",
+        "django/db/models/fields/__init__.py",
+        "django/forms/fields.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/admin/checks.py",
+        "django/apps/config.py",
+        "django/conf/global_settings.py",
+        "django/apps/registry.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13089",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.09090909090909091,
+      "first_gold_rank": 11,
+      "ranked": 70,
+      "repo": "django/django",
+      "gold_files": [
+        "django/core/cache/backends/db.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 845,
+      "export_seconds": 1.256,
+      "rank_seconds": 12.098,
+      "top10": [
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/query.py",
+        "django/template/defaultfilters.py",
+        "django/contrib/sessions/backends/cache.py",
+        "django/middleware/cache.py",
+        "django/templatetags/cache.py",
+        "django/utils/cache.py",
+        "django/views/decorators/cache.py",
+        "django/contrib/sessions/backends/db.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13109",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.14285714285714285,
+      "first_gold_rank": 7,
+      "ranked": 28,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/fields/related.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 846,
+      "export_seconds": 1.298,
+      "rank_seconds": 10.923,
+      "top10": [
+        "django/contrib/auth/password_validation.py",
+        "django/contrib/gis/gdal/srs.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/postgres/fields/hstore.py",
+        "django/contrib/postgres/forms/array.py",
+        "django/db/models/fields/json.py",
+        "django/db/models/fields/related.py",
+        "django/db/models/fields/__init__.py",
+        "django/forms/fields.py",
+        "django/forms/models.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13158",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 25,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/sql/query.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 846,
+      "export_seconds": 1.15,
+      "rank_seconds": 11.174,
+      "top10": [
+        "django/db/backends/base/base.py",
+        "django/contrib/admin/templatetags/admin_list.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/admin/options.py",
+        "django/contrib/postgres/search.py",
+        "django/shortcuts.py",
+        "django/contrib/admin/helpers.py",
+        "django/apps/config.py",
+        "django/conf/global_settings.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13212",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 26,
+      "repo": "django/django",
+      "gold_files": [
+        "django/core/validators.py",
+        "django/forms/fields.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 851,
+      "export_seconds": 1.201,
+      "rank_seconds": 11.035,
+      "top10": [
+        "django/core/exceptions.py",
+        "django/db/models/fields/__init__.py",
+        "django/urls/conf.py",
+        "django/contrib/admin/filters.py",
+        "django/contrib/gis/gdal/field.py",
+        "django/db/models/expressions.py",
+        "django/forms/boundfield.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/messages/storage/base.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13315",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 53,
+      "repo": "django/django",
+      "gold_files": [
+        "django/forms/models.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 852,
+      "export_seconds": 1.241,
+      "rank_seconds": 11.669,
+      "top10": [
+        "django/db/models/fields/related.py",
+        "django/shortcuts.py",
+        "django/contrib/admin/templatetags/base.py",
+        "django/contrib/admin/templatetags/log.py",
+        "django/contrib/flatpages/templatetags/flatpages.py",
+        "django/db/migrations/state.py",
+        "django/db/migrations/writer.py",
+        "django/forms/renderers.py",
+        "django/forms/widgets.py",
+        "django/template/base.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13401",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.14285714285714285,
+      "first_gold_rank": 7,
+      "ranked": 24,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/fields/__init__.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 851,
+      "export_seconds": 1.302,
+      "rank_seconds": 10.526,
+      "top10": [
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/postgres/fields/ranges.py",
+        "django/contrib/sessions/backends/db.py",
+        "django/db/models/base.py",
+        "django/contrib/gis/gdal/field.py",
+        "django/db/models/expressions.py",
+        "django/db/models/fields/__init__.py",
+        "django/forms/fields.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/apps/config.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13406",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.5,
+      "first_gold_rank": 2,
+      "ranked": 69,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/query.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 851,
+      "export_seconds": 1.206,
+      "rank_seconds": 11.238,
+      "top10": [
+        "django/contrib/admin/filters.py",
+        "django/db/models/query.py",
+        "django/db/models/sql/query.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/shortcuts.py",
+        "django/contrib/sessions/backends/base.py",
+        "django/contrib/admin/models.py",
+        "django/contrib/auth/models.py",
+        "django/contrib/contenttypes/models.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13449",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 83,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/expressions.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 851,
+      "export_seconds": 1.2,
+      "rank_seconds": 10.975,
+      "top10": [
+        "django/db/utils.py",
+        "django/db/models/query.py",
+        "django/db/models/base.py",
+        "django/db/models/fields/__init__.py",
+        "django/forms/fields.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/gis/gdal/geomtype.py",
+        "django/contrib/postgres/fields/ranges.py",
+        "django/contrib/sessions/backends/db.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13670",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.16666666666666666,
+      "first_gold_rank": 6,
+      "ranked": 30,
+      "repo": "django/django",
+      "gold_files": [
+        "django/utils/dateformat.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 853,
+      "export_seconds": 1.238,
+      "rank_seconds": 11.617,
+      "top10": [
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/query.py",
+        "django/template/defaultfilters.py",
+        "django/db/models/expressions.py",
+        "django/utils/dateformat.py",
+        "django/contrib/gis/gdal/geomtype.py",
+        "django/utils/datetime_safe.py",
+        "django/apps/config.py",
+        "setup.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13741",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 27,
+      "repo": "django/django",
+      "gold_files": [
+        "django/contrib/auth/forms.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 853,
+      "export_seconds": 1.222,
+      "rank_seconds": 11.061,
+      "top10": [
+        "django/contrib/auth/forms.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/forms/boundfield.py",
+        "django/contrib/admin/filters.py",
+        "django/contrib/gis/gdal/field.py",
+        "django/db/models/expressions.py",
+        "django/apps/config.py",
+        "django/shortcuts.py",
+        "django/conf/global_settings.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-13786",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 43,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/migrations/operations/models.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 854,
+      "export_seconds": 1.328,
+      "rank_seconds": 11.399,
+      "top10": [
+        "django/db/migrations/operations/models.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/postgres/fields/ranges.py",
+        "django/contrib/sessions/backends/db.py",
+        "django/db/models/base.py",
+        "django/core/cache/backends/db.py",
+        "django/db/models/options.py",
+        "django/forms/widgets.py",
+        "django/views/generic/base.py",
+        "django/contrib/gis/gdal/raster/band.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-14007",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 37,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/sql/compiler.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 854,
+      "export_seconds": 1.246,
+      "rank_seconds": 12.553,
+      "top10": [
+        "django/contrib/gis/db/models/fields.py",
+        "django/contrib/gis/db/models/sql/conversion.py",
+        "django/db/models/fields/json.py",
+        "django/contrib/gis/geos/mutable_list.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/fields/__init__.py",
+        "django/db/models/query.py",
+        "django/db/models/sql/query.py",
+        "django/shortcuts.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-14034",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.2,
+      "first_gold_rank": 5,
+      "ranked": 33,
+      "repo": "django/django",
+      "gold_files": [
+        "django/forms/boundfield.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 854,
+      "export_seconds": 1.527,
+      "rank_seconds": 11.873,
+      "top10": [
+        "django/forms/fields.py",
+        "django/contrib/admin/filters.py",
+        "django/contrib/gis/gdal/field.py",
+        "django/db/models/expressions.py",
+        "django/forms/boundfield.py",
+        "django/db/models/fields/__init__.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/query.py",
+        "django/template/defaultfilters.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-14053",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 20,
+      "repo": "django/django",
+      "gold_files": [
+        "django/contrib/staticfiles/storage.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 853,
+      "export_seconds": 1.227,
+      "rank_seconds": 11.283,
+      "top10": [
+        "django/contrib/staticfiles/storage.py",
+        "django/core/files/base.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/apps/config.py",
+        "django/conf/global_settings.py",
+        "django/shortcuts.py",
+        "django/contrib/admin/options.py",
+        "django/apps/registry.py",
+        "django/contrib/admin/decorators.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-14238",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.05555555555555555,
+      "first_gold_rank": 18,
+      "ranked": 269,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/fields/__init__.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 854,
+      "export_seconds": 1.201,
+      "rank_seconds": 11.298,
+      "top10": [
+        "django/apps/config.py",
+        "django/contrib/admin/checks.py",
+        "django/contrib/admin/options.py",
+        "django/contrib/admin/sites.py",
+        "django/contrib/contenttypes/fields.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/sites/managers.py",
+        "django/contrib/staticfiles/finders.py",
+        "django/core/management/base.py",
+        "django/db/backends/base/validation.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-14311",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 30,
+      "repo": "django/django",
+      "gold_files": [
+        "django/utils/autoreload.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 854,
+      "export_seconds": 1.248,
+      "rank_seconds": 11.795,
+      "top10": [
+        "django/core/management/commands/shell.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/query.py",
+        "django/template/defaultfilters.py",
+        "django/__main__.py",
+        "django/conf/global_settings.py",
+        "django/contrib/admin/decorators.py",
+        "setup.py",
+        "django/contrib/staticfiles/management/commands/runserver.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-14500",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.02631578947368421,
+      "first_gold_rank": 38,
+      "ranked": 55,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/migrations/executor.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 854,
+      "export_seconds": 1.217,
+      "rank_seconds": 11.501,
+      "top10": [
+        "django/contrib/admin/migrations/0001_initial.py",
+        "django/contrib/admin/migrations/0002_logentry_remove_auto_add.py",
+        "django/contrib/admin/migrations/0003_logentry_add_action_flag_choices.py",
+        "django/contrib/auth/migrations/0001_initial.py",
+        "django/contrib/auth/migrations/0002_alter_permission_name_max_length.py",
+        "django/contrib/auth/migrations/0003_alter_user_email_max_length.py",
+        "django/contrib/auth/migrations/0004_alter_user_username_opts.py",
+        "django/contrib/auth/migrations/0005_alter_user_last_login_null.py",
+        "django/contrib/auth/migrations/0006_require_contenttypes_0002.py",
+        "django/contrib/auth/migrations/0007_alter_validators_add_error_messages.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-14631",
+      "recall": {
+        "1": 0.5,
+        "5": 0.5,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 35,
+      "repo": "django/django",
+      "gold_files": [
+        "django/forms/boundfield.py",
+        "django/forms/forms.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 854,
+      "export_seconds": 1.19,
+      "rank_seconds": 11.659,
+      "top10": [
+        "django/forms/forms.py",
+        "django/contrib/auth/forms.py",
+        "django/contrib/sessions/backends/base.py",
+        "django/db/models/enums.py",
+        "django/db/models/query.py",
+        "django/utils/datastructures.py",
+        "django/forms/boundfield.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/template/defaultfilters.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-14765",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 26,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/migrations/state.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 854,
+      "export_seconds": 1.192,
+      "rank_seconds": 11.782,
+      "top10": [
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/shortcuts.py",
+        "django/contrib/admin/decorators.py",
+        "django/db/migrations/autodetector.py",
+        "django/db/migrations/graph.py",
+        "django/apps/registry.py",
+        "django/conf/global_settings.py",
+        "django/contrib/admin/options.py",
+        "django/contrib/admin/sites.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-14792",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 29,
+      "repo": "django/django",
+      "gold_files": [
+        "django/utils/timezone.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 854,
+      "export_seconds": 1.255,
+      "rank_seconds": 10.971,
+      "top10": [
+        "django/contrib/gis/db/models/functions.py",
+        "django/contrib/gis/geos/mutable_list.py",
+        "django/db/models/query.py",
+        "django/db/models/functions/text.py",
+        "django/urls/base.py",
+        "django/urls/resolvers.py",
+        "django/template/defaultfilters.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/expressions.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-15103",
+      "recall": {
+        "1": 0.5,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 24,
+      "repo": "django/django",
+      "gold_files": [
+        "django/template/defaultfilters.py",
+        "django/utils/html.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 857,
+      "export_seconds": 1.275,
+      "rank_seconds": 12.928,
+      "top10": [
+        "django/template/defaultfilters.py",
+        "django/utils/html.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/conf/global_settings.py",
+        "django/contrib/admin/decorators.py",
+        "django/shortcuts.py",
+        "django/__init__.py",
+        "django/conf/__init__.py",
+        "django/contrib/gis/measure.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-15380",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.027777777777777776,
+      "first_gold_rank": 36,
+      "ranked": 269,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/migrations/autodetector.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 858,
+      "export_seconds": 1.246,
+      "rank_seconds": 13.071,
+      "top10": [
+        "django/contrib/admin/migrations/0001_initial.py",
+        "django/contrib/admin/migrations/0002_logentry_remove_auto_add.py",
+        "django/contrib/admin/migrations/0003_logentry_add_action_flag_choices.py",
+        "django/contrib/auth/migrations/0001_initial.py",
+        "django/contrib/auth/migrations/0002_alter_permission_name_max_length.py",
+        "django/contrib/auth/migrations/0003_alter_user_email_max_length.py",
+        "django/contrib/auth/migrations/0004_alter_user_username_opts.py",
+        "django/contrib/auth/migrations/0005_alter_user_last_login_null.py",
+        "django/contrib/auth/migrations/0006_require_contenttypes_0002.py",
+        "django/contrib/auth/migrations/0007_alter_validators_add_error_messages.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-15467",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 17,
+      "repo": "django/django",
+      "gold_files": [
+        "django/contrib/admin/options.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 859,
+      "export_seconds": 1.296,
+      "rank_seconds": 20.206,
+      "top10": [
+        "django/contrib/admin/options.py",
+        "django/utils/timezone.py",
+        "django/utils/translation/__init__.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/admin/actions.py",
+        "django/contrib/admin/checks.py",
+        "django/contrib/gis/admin/options.py",
+        "django/db/models/options.py",
+        "django/conf/global_settings.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-15503",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.1111111111111111,
+      "first_gold_rank": 9,
+      "ranked": 68,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/fields/json.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 859,
+      "export_seconds": 1.287,
+      "rank_seconds": 11.365,
+      "top10": [
+        "django/contrib/sessions/backends/base.py",
+        "django/core/cache/backends/base.py",
+        "django/core/cache/backends/db.py",
+        "django/core/cache/backends/dummy.py",
+        "django/core/cache/backends/filebased.py",
+        "django/core/cache/backends/locmem.py",
+        "django/core/cache/backends/redis.py",
+        "django/contrib/postgres/fields/jsonb.py",
+        "django/db/models/fields/json.py",
+        "django/forms/fields.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-15731",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.5,
+      "first_gold_rank": 2,
+      "ranked": 21,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/manager.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 859,
+      "export_seconds": 1.156,
+      "rank_seconds": 12.227,
+      "top10": [
+        "django/core/signing.py",
+        "django/db/models/manager.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/query.py",
+        "django/template/defaultfilters.py",
+        "django/contrib/admin/filters.py",
+        "django/apps/registry.py",
+        "django/contrib/admin/options.py",
+        "django/contrib/auth/__init__.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-15741",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 32,
+      "repo": "django/django",
+      "gold_files": [
+        "django/utils/formats.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 859,
+      "export_seconds": 1.135,
+      "rank_seconds": 11.472,
+      "top10": [
+        "django/utils/functional.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/transaction.py",
+        "django/db/backends/base/base.py",
+        "django/template/defaultfilters.py",
+        "django/utils/datetime_safe.py",
+        "django/template/base.py",
+        "django/template/backends/django.py",
+        "django/template/backends/dummy.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-15987",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.1111111111111111,
+      "first_gold_rank": 9,
+      "ranked": 43,
+      "repo": "django/django",
+      "gold_files": [
+        "django/core/management/commands/loaddata.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 859,
+      "export_seconds": 1.177,
+      "rank_seconds": 11.722,
+      "top10": [
+        "django/contrib/staticfiles/storage.py",
+        "django/core/files/storage.py",
+        "django/core/management/commands/makemessages.py",
+        "django/db/migrations/writer.py",
+        "django/db/models/fields/files.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/expressions.py",
+        "django/core/management/commands/loaddata.py",
+        "django/contrib/gis/gdal/geometries.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-16082",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.09090909090909091,
+      "first_gold_rank": 11,
+      "ranked": 46,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/expressions.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 861,
+      "export_seconds": 1.18,
+      "rank_seconds": 11.075,
+      "top10": [
+        "django/template/base.py",
+        "django/urls/base.py",
+        "django/urls/resolvers.py",
+        "django/contrib/gis/db/backends/postgis/operations.py",
+        "django/contrib/gis/db/models/aggregates.py",
+        "django/contrib/gis/db/models/functions.py",
+        "django/contrib/postgres/expressions.py",
+        "django/contrib/postgres/aggregates/general.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/postgres/fields/ranges.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-16256",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.5
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.14285714285714285,
+      "first_gold_rank": 7,
+      "ranked": 28,
+      "repo": "django/django",
+      "gold_files": [
+        "django/contrib/contenttypes/fields.py",
+        "django/db/models/fields/related_descriptors.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 861,
+      "export_seconds": 1.174,
+      "rank_seconds": 12.841,
+      "top10": [
+        "django/core/exceptions.py",
+        "django/db/models/options.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/contrib/admin/filters.py",
+        "django/db/models/query.py",
+        "django/db/models/fields/related_descriptors.py",
+        "django/contrib/admin/options.py",
+        "django/conf/global_settings.py",
+        "django/contrib/admin/models.py"
+      ]
+    },
+    {
+      "instance_id": "django__django-16263",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.25
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.125,
+      "first_gold_rank": 8,
+      "ranked": 38,
+      "repo": "django/django",
+      "gold_files": [
+        "django/db/models/expressions.py",
+        "django/db/models/query_utils.py",
+        "django/db/models/sql/query.py",
+        "django/db/models/sql/where.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 861,
+      "export_seconds": 1.222,
+      "rank_seconds": 11.594,
+      "top10": [
+        "django/contrib/gis/geos/mutable_list.py",
+        "django/core/paginator.py",
+        "django/db/models/aggregates.py",
+        "django/db/models/query.py",
+        "django/db/backends/base/base.py",
+        "django/contrib/gis/gdal/raster/band.py",
+        "django/contrib/postgres/fields/array.py",
+        "django/db/models/sql/query.py",
+        "django/db/backends/ddl_references.py",
+        "django/contrib/admin/options.py"
+      ]
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-13989",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.5,
+      "first_gold_rank": 2,
+      "ranked": 32,
+      "repo": "matplotlib/matplotlib",
+      "gold_files": [
+        "lib/matplotlib/axes/_axes.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 747,
+      "export_seconds": 2.059,
+      "rank_seconds": 21.469,
+      "top10": [
+        "lib/matplotlib/pyplot.py",
+        "lib/matplotlib/axes/_axes.py",
+        "lib/matplotlib/mathtext.py",
+        "lib/matplotlib/backends/backend_pdf.py",
+        "versioneer.py",
+        "setup.py",
+        "setupext.py",
+        "examples/units/basic_units.py",
+        "examples/animation/animated_histogram.py",
+        "examples/animation/double_pendulum_sgskip.py"
+      ]
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-20676",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.5,
+      "first_gold_rank": 2,
+      "ranked": 38,
+      "repo": "matplotlib/matplotlib",
+      "gold_files": [
+        "lib/matplotlib/widgets.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 768,
+      "export_seconds": 1.476,
+      "rank_seconds": 20.805,
+      "top10": [
+        "lib/matplotlib/__init__.py",
+        "lib/matplotlib/widgets.py",
+        "lib/matplotlib/artist.py",
+        "lib/matplotlib/figure.py",
+        "lib/matplotlib/offsetbox.py",
+        "lib/matplotlib/pyplot.py",
+        "lib/matplotlib/axes/_axes.py",
+        "lib/mpl_toolkits/axes_grid1/mpl_axes.py",
+        "lib/mpl_toolkits/axisartist/axislines.py",
+        "lib/matplotlib/backends/backend_pdf.py"
+      ]
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-20859",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.5,
+      "first_gold_rank": 2,
+      "ranked": 36,
+      "repo": "matplotlib/matplotlib",
+      "gold_files": [
+        "lib/matplotlib/legend.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 773,
+      "export_seconds": 1.434,
+      "rank_seconds": 12.716,
+      "top10": [
+        "lib/matplotlib/figure.py",
+        "lib/matplotlib/legend.py",
+        "lib/matplotlib/pyplot.py",
+        "lib/matplotlib/axes/_axes.py",
+        "lib/matplotlib/backends/backend_pdf.py",
+        "examples/text_labels_and_annotations/legend.py",
+        "setup.py",
+        "doc/conf.py",
+        "setupext.py",
+        "doc/sphinxext/missing_references.py"
+      ]
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-21568",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 30,
+      "repo": "matplotlib/matplotlib",
+      "gold_files": [
+        "lib/matplotlib/dates.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 784,
+      "export_seconds": 1.424,
+      "rank_seconds": 14.566,
+      "top10": [
+        "lib/matplotlib/axis.py",
+        "lib/matplotlib/pyplot.py",
+        "lib/matplotlib/axes/_base.py",
+        "lib/mpl_toolkits/axes_grid1/mpl_axes.py",
+        "lib/mpl_toolkits/axisartist/axislines.py",
+        "lib/mpl_toolkits/mplot3d/axis3d.py",
+        "setupext.py",
+        "setup.py",
+        "doc/conf.py",
+        "examples/event_handling/timers.py"
+      ]
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-23299",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 38,
+      "repo": "matplotlib/matplotlib",
+      "gold_files": [
+        "lib/matplotlib/__init__.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 771,
+      "export_seconds": 1.481,
+      "rank_seconds": 15.289,
+      "top10": [
+        "lib/matplotlib/__init__.py",
+        "lib/matplotlib/pyplot.py",
+        "doc/conf.py",
+        "examples/lines_bars_and_markers/fill_between_alpha.py",
+        "lib/matplotlib/backend_bases.py",
+        "lib/matplotlib/animation.py",
+        "doc/sphinxext/gallery_order.py",
+        "examples/misc/customize_rc.py",
+        "examples/misc/pythonic_matplotlib.py",
+        "examples/event_handling/pick_event_demo.py"
+      ]
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-24570",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 23,
+      "repo": "matplotlib/matplotlib",
+      "gold_files": [
+        "lib/matplotlib/offsetbox.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 782,
+      "export_seconds": 1.615,
+      "rank_seconds": 15.715,
+      "top10": [
+        "lib/matplotlib/offsetbox.py",
+        "lib/matplotlib/colors.py",
+        "setupext.py",
+        "setup.py",
+        "examples/color/colormap_reference.py",
+        "lib/matplotlib/legend.py",
+        "examples/userdemo/anchored_box04.py",
+        "doc/conf.py",
+        "examples/animation/unchained.py",
+        "examples/axes_grid1/inset_locator_demo.py"
+      ]
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-25311",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 30,
+      "repo": "matplotlib/matplotlib",
+      "gold_files": [
+        "lib/matplotlib/offsetbox.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 769,
+      "export_seconds": 1.547,
+      "rank_seconds": 19.984,
+      "top10": [
+        "lib/matplotlib/backend_managers.py",
+        "lib/matplotlib/backend_tools.py",
+        "lib/matplotlib/figure.py",
+        "lib/matplotlib/pyplot.py",
+        "lib/matplotlib/text.py",
+        "lib/matplotlib/legend.py",
+        "lib/matplotlib/axes/_axes.py",
+        "setupext.py",
+        "galleries/examples/text_labels_and_annotations/annotation_demo.py",
+        "doc/conf.py"
+      ]
+    },
+    {
+      "instance_id": "matplotlib__matplotlib-25332",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.125,
+      "first_gold_rank": 8,
+      "ranked": 29,
+      "repo": "matplotlib/matplotlib",
+      "gold_files": [
+        "lib/matplotlib/cbook.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 769,
+      "export_seconds": 2.257,
+      "rank_seconds": 12.911,
+      "top10": [
+        "lib/matplotlib/backend_managers.py",
+        "lib/matplotlib/backend_tools.py",
+        "lib/matplotlib/figure.py",
+        "lib/matplotlib/pyplot.py",
+        "lib/matplotlib/contour.py",
+        "doc/conf.py",
+        "setupext.py",
+        "lib/matplotlib/cbook.py",
+        "setup.py",
+        "galleries/examples/axes_grid1/inset_locator_demo.py"
+      ]
+    },
+    {
+      "instance_id": "mwaskom__seaborn-3069",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.5,
+      "first_gold_rank": 2,
+      "ranked": 15,
+      "repo": "mwaskom/seaborn",
+      "gold_files": [
+        "seaborn/_core/plot.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 111,
+      "export_seconds": 0.185,
+      "rank_seconds": 3.233,
+      "top10": [
+        "seaborn/_core/scales.py",
+        "seaborn/_core/plot.py",
+        "doc/sphinxext/tutorial_builder.py",
+        "seaborn/axisgrid.py",
+        "seaborn/categorical.py",
+        "doc/tools/generate_logos.py",
+        "examples/paired_pointplots.py",
+        "seaborn/objects.py",
+        "seaborn/algorithms.py",
+        "examples/pointplot_anova.py"
+      ]
+    },
+    {
+      "instance_id": "mwaskom__seaborn-3187",
+      "recall": {
+        "1": 0.0,
+        "5": 0.5,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.3333333333333333,
+      "first_gold_rank": 3,
+      "ranked": 32,
+      "repo": "mwaskom/seaborn",
+      "gold_files": [
+        "seaborn/_core/scales.py",
+        "seaborn/utils.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 112,
+      "export_seconds": 0.179,
+      "rank_seconds": 2.063,
+      "top10": [
+        "seaborn/axisgrid.py",
+        "seaborn/_core/properties.py",
+        "seaborn/_core/scales.py",
+        "doc/sphinxext/tutorial_builder.py",
+        "seaborn/categorical.py",
+        "seaborn/utils.py",
+        "doc/tools/generate_logos.py",
+        "examples/pairgrid_dotplot.py",
+        "examples/large_distributions.py",
+        "examples/many_facets.py"
+      ]
+    },
+    {
+      "instance_id": "pallets__flask-5014",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.3333333333333333,
+      "first_gold_rank": 3,
+      "ranked": 14,
+      "repo": "pallets/flask",
+      "gold_files": [
+        "src/flask/blueprints.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 33,
+      "export_seconds": 0.12,
+      "rank_seconds": 1.068,
+      "top10": [
+        "src/flask/app.py",
+        "src/flask/wrappers.py",
+        "src/flask/blueprints.py",
+        "examples/tutorial/flaskr/auth.py",
+        "examples/celery/src/task_app/__init__.py",
+        "examples/celery/src/task_app/views.py",
+        "src/flask/sessions.py",
+        "examples/tutorial/flaskr/blog.py",
+        "src/flask/helpers.py",
+        "docs/conf.py"
+      ]
+    },
+    {
+      "instance_id": "psf__requests-1724",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 18,
+      "repo": "psf/requests",
+      "gold_files": [
+        "requests/sessions.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 74,
+      "export_seconds": 0.128,
+      "rank_seconds": 2.66,
+      "top10": [
+        "requests/sessions.py",
+        "requests/adapters.py",
+        "requests/packages/urllib3/connectionpool.py",
+        "requests/api.py",
+        "docs/conf.py",
+        "setup.py",
+        "requests/models.py",
+        "requests/packages/charade/hebrewprober.py",
+        "requests/cookies.py",
+        "requests/utils.py"
+      ]
+    },
+    {
+      "instance_id": "psf__requests-2317",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.5,
+      "first_gold_rank": 2,
+      "ranked": 11,
+      "repo": "psf/requests",
+      "gold_files": [
+        "requests/sessions.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 82,
+      "export_seconds": 0.137,
+      "rank_seconds": 2.726,
+      "top10": [
+        "requests/adapters.py",
+        "requests/sessions.py",
+        "docs/_themes/flask_theme_support.py",
+        "requests/packages/chardet/hebrewprober.py",
+        "requests/utils.py",
+        "docs/conf.py",
+        "requests/models.py",
+        "requests/packages/urllib3/contrib/pyopenssl.py",
+        "requests/compat.py",
+        "requests/packages/urllib3/packages/six.py"
+      ]
+    },
+    {
+      "instance_id": "pydata__xarray-3095",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 11,
+      "repo": "pydata/xarray",
+      "gold_files": [
+        "xarray/core/indexing.py",
+        "xarray/core/variable.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 92,
+      "export_seconds": 0.178,
+      "rank_seconds": 3.309,
+      "top10": [
+        "versioneer.py",
+        "xarray/conventions.py",
+        "xarray/backends/api.py",
+        "doc/conf.py",
+        "doc/examples/_code/accessor_example.py",
+        "xarray/coding/times.py",
+        "xarray/core/missing.py",
+        "doc/gallery/plot_lines_from_2d.py",
+        "xarray/backends/rasterio_.py",
+        "setup.py"
+      ]
+    },
+    {
+      "instance_id": "pydata__xarray-3151",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 11,
+      "repo": "pydata/xarray",
+      "gold_files": [
+        "xarray/core/combine.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 92,
+      "export_seconds": 0.182,
+      "rank_seconds": 2.332,
+      "top10": [
+        "xarray/core/dataarray.py",
+        "xarray/core/dataset.py",
+        "xarray/core/variable.py",
+        "xarray/conventions.py",
+        "versioneer.py",
+        "doc/gallery/plot_rasterio.py",
+        "xarray/coding/cftimeindex.py",
+        "setup.py",
+        "xarray/coding/times.py",
+        "xarray/core/missing.py"
+      ]
+    },
+    {
+      "instance_id": "pydata__xarray-3305",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 9,
+      "repo": "pydata/xarray",
+      "gold_files": [
+        "xarray/core/dataset.py",
+        "xarray/core/variable.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 93,
+      "export_seconds": 0.181,
+      "rank_seconds": 3.237,
+      "top10": [
+        "versioneer.py",
+        "xarray/core/common.py",
+        "xarray/conventions.py",
+        "setup.py",
+        "xarray/backends/api.py",
+        "xarray/coding/cftimeindex.py",
+        "xarray/core/missing.py",
+        "xarray/core/ops.py",
+        "doc/conf.py"
+      ]
+    },
+    {
+      "instance_id": "pydata__xarray-3677",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.5,
+      "first_gold_rank": 2,
+      "ranked": 23,
+      "repo": "pydata/xarray",
+      "gold_files": [
+        "xarray/core/dataset.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 96,
+      "export_seconds": 0.168,
+      "rank_seconds": 3.145,
+      "top10": [
+        "xarray/core/dataarray.py",
+        "xarray/core/dataset.py",
+        "xarray/core/coordinates.py",
+        "xarray/core/merge.py",
+        "versioneer.py",
+        "asv_bench/benchmarks/combine.py",
+        "xarray/backends/common.py",
+        "xarray/core/common.py",
+        "xarray/conventions.py",
+        "setup.py"
+      ]
+    },
+    {
+      "instance_id": "pydata__xarray-6461",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.05555555555555555,
+      "first_gold_rank": 18,
+      "ranked": 23,
+      "repo": "pydata/xarray",
+      "gold_files": [
+        "xarray/core/computation.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 110,
+      "export_seconds": 0.223,
+      "rank_seconds": 3.926,
+      "top10": [
+        "xarray/coding/cftime_offsets.py",
+        "asv_bench/benchmarks/indexing.py",
+        "xarray/backends/api.py",
+        "xarray/backends/plugins.py",
+        "xarray/backends/netCDF4_.py",
+        "asv_bench/benchmarks/combine.py",
+        "asv_bench/benchmarks/dataarray_missing.py",
+        "asv_bench/benchmarks/dataset_io.py",
+        "xarray/conventions.py",
+        "xarray/backends/zarr.py"
+      ]
+    },
+    {
+      "instance_id": "pylint-dev__pylint-4661",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 15,
+      "repo": "pylint-dev/pylint",
+      "gold_files": [
+        "pylint/config/__init__.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 118,
+      "export_seconds": 0.449,
+      "rank_seconds": 3.709,
+      "top10": [
+        "doc/conf.py",
+        "pylint/checkers/base.py",
+        "pylint/config/find_default_config_files.py",
+        "doc/exts/pylint_extensions.py",
+        "pylint/checkers/strings.py",
+        "pylint/epylint.py",
+        "pylint/graph.py",
+        "pylint/checkers/utils.py",
+        "pylint/exceptions.py",
+        "pylint/checkers/design_analysis.py"
+      ]
+    },
+    {
+      "instance_id": "pylint-dev__pylint-6528",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 18,
+      "repo": "pylint-dev/pylint",
+      "gold_files": [
+        "pylint/lint/expand_modules.py",
+        "pylint/lint/pylinter.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 405,
+      "export_seconds": 0.462,
+      "rank_seconds": 9.915,
+      "top10": [
+        "pylint/checkers/unicode.py",
+        "doc/conf.py",
+        "pylint/epylint.py",
+        "pylint/checkers/variables.py",
+        "pylint/checkers/imports.py",
+        "doc/exts/pylint_options.py",
+        "pylint/checkers/format.py",
+        "pylint/checkers/unsupported_version.py",
+        "pylint/constants.py",
+        "pylint/checkers/typecheck.py"
+      ]
+    },
+    {
+      "instance_id": "pytest-dev__pytest-10356",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 9,
+      "repo": "pytest-dev/pytest",
+      "gold_files": [
+        "src/_pytest/mark/structures.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 85,
+      "export_seconds": 0.191,
+      "rank_seconds": 2.916,
+      "top10": [
+        "doc/en/conf.py",
+        "scripts/update-plugin-list.py",
+        "doc/en/example/assertion/failure_demo.py",
+        "bench/bench.py",
+        "bench/manyparam.py",
+        "doc/en/example/multipython.py",
+        "scripts/prepare-release-pr.py",
+        "scripts/release.py",
+        "bench/bench_argcomplete.py"
+      ]
+    },
+    {
+      "instance_id": "pytest-dev__pytest-6202",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 6,
+      "repo": "pytest-dev/pytest",
+      "gold_files": [
+        "src/_pytest/python.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 75,
+      "export_seconds": 0.159,
+      "rank_seconds": 2.316,
+      "top10": [
+        "extra/get_issues.py",
+        "doc/en/example/xfail_demo.py",
+        "doc/en/conf.py",
+        "setup.py",
+        "bench/bench.py",
+        "bench/bench_argcomplete.py"
+      ]
+    },
+    {
+      "instance_id": "pytest-dev__pytest-7432",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 9,
+      "repo": "pytest-dev/pytest",
+      "gold_files": [
+        "src/_pytest/skipping.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 80,
+      "export_seconds": 0.173,
+      "rank_seconds": 2.465,
+      "top10": [
+        "doc/en/conf.py",
+        "scripts/release-on-comment.py",
+        "bench/skip.py",
+        "bench/bench.py",
+        "setup.py",
+        "bench/bench_argcomplete.py",
+        "bench/manyparam.py",
+        "scripts/publish-gh-release-notes.py",
+        "doc/en/example/multipython.py"
+      ]
+    },
+    {
+      "instance_id": "pytest-dev__pytest-7490",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 9,
+      "repo": "pytest-dev/pytest",
+      "gold_files": [
+        "src/_pytest/skipping.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 80,
+      "export_seconds": 0.166,
+      "rank_seconds": 2.385,
+      "top10": [
+        "doc/en/example/xfail_demo.py",
+        "bench/bench.py",
+        "doc/en/example/assertion/failure_demo.py",
+        "doc/en/conf.py",
+        "extra/get_issues.py",
+        "setup.py",
+        "bench/bench_argcomplete.py",
+        "bench/manyparam.py",
+        "bench/empty.py"
+      ]
+    },
+    {
+      "instance_id": "pytest-dev__pytest-7571",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 9,
+      "repo": "pytest-dev/pytest",
+      "gold_files": [
+        "src/_pytest/logging.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 80,
+      "export_seconds": 0.259,
+      "rank_seconds": 1.777,
+      "top10": [
+        "doc/en/conf.py",
+        "bench/bench.py",
+        "bench/bench_argcomplete.py",
+        "setup.py",
+        "bench/empty.py",
+        "bench/manyparam.py",
+        "doc/en/example/assertion/failure_demo.py",
+        "scripts/publish-gh-release-notes.py",
+        "scripts/release-on-comment.py"
+      ]
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-10844",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 34,
+      "repo": "scikit-learn/scikit-learn",
+      "gold_files": [
+        "sklearn/metrics/cluster/supervised.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 499,
+      "export_seconds": 0.571,
+      "rank_seconds": 14.306,
+      "top10": [
+        "sklearn/metrics/cluster/supervised.py",
+        "sklearn/metrics/cluster/unsupervised.py",
+        "sklearn/neighbors/unsupervised.py",
+        "doc/tutorial/machine_learning_map/pyparsing.py",
+        "doc/conf.py",
+        "benchmarks/bench_text_vectorizers.py",
+        "sklearn/metrics/scorer.py",
+        "sklearn/cluster/k_means_.py",
+        "sklearn/metrics/__init__.py",
+        "setup.py"
+      ]
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-11310",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.3333333333333333,
+      "first_gold_rank": 3,
+      "ranked": 31,
+      "repo": "scikit-learn/scikit-learn",
+      "gold_files": [
+        "sklearn/model_selection/_search.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 501,
+      "export_seconds": 0.583,
+      "rank_seconds": 10.039,
+      "top10": [
+        "examples/applications/svm_gui.py",
+        "sklearn/grid_search.py",
+        "sklearn/model_selection/_search.py",
+        "examples/linear_model/plot_logistic.py",
+        "benchmarks/bench_20newsgroups.py",
+        "setup.py",
+        "benchmarks/bench_glm.py",
+        "benchmarks/bench_plot_randomized_svd.py",
+        "doc/tutorial/machine_learning_map/pyparsing.py",
+        "benchmarks/bench_rcv1_logreg_convergence.py"
+      ]
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-12973",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 28,
+      "repo": "scikit-learn/scikit-learn",
+      "gold_files": [
+        "sklearn/linear_model/least_angle.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 543,
+      "export_seconds": 0.672,
+      "rank_seconds": 12.28,
+      "top10": [
+        "sklearn/linear_model/least_angle.py",
+        "examples/model_selection/plot_randomized_search.py",
+        "doc/tutorial/machine_learning_map/pyparsing.py",
+        "examples/linear_model/plot_lasso_model_selection.py",
+        "sklearn/cluster/k_means_.py",
+        "benchmarks/bench_multilabel_metrics.py",
+        "setup.py",
+        "benchmarks/bench_rcv1_logreg_convergence.py",
+        "examples/applications/plot_outlier_detection_housing.py",
+        "benchmarks/bench_plot_nmf.py"
+      ]
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-13328",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 18,
+      "repo": "scikit-learn/scikit-learn",
+      "gold_files": [
+        "sklearn/linear_model/huber.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 551,
+      "export_seconds": 0.614,
+      "rank_seconds": 10.733,
+      "top10": [
+        "sklearn/linear_model/huber.py",
+        "doc/tutorial/machine_learning_map/pyparsing.py",
+        "setup.py",
+        "sklearn/utils/optimize.py",
+        "examples/linear_model/plot_huber_vs_ridge.py",
+        "benchmarks/bench_plot_nmf.py",
+        "benchmarks/bench_20newsgroups.py",
+        "sklearn/cross_decomposition/pls_.py",
+        "benchmarks/bench_isolation_forest.py",
+        "benchmarks/bench_tsne_mnist.py"
+      ]
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-14496",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 25,
+      "repo": "scikit-learn/scikit-learn",
+      "gold_files": [
+        "sklearn/cluster/optics_.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 521,
+      "export_seconds": 0.574,
+      "rank_seconds": 12.308,
+      "top10": [
+        "sklearn/cluster/optics_.py",
+        "sklearn/externals/_arff.py",
+        "sklearn/base.py",
+        "sklearn/datasets/base.py",
+        "sklearn/decomposition/base.py",
+        "sklearn/ensemble/base.py",
+        "sklearn/feature_selection/base.py",
+        "sklearn/linear_model/base.py",
+        "sklearn/metrics/base.py",
+        "sklearn/mixture/base.py"
+      ]
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-14983",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 21,
+      "repo": "scikit-learn/scikit-learn",
+      "gold_files": [
+        "sklearn/model_selection/_split.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 529,
+      "export_seconds": 0.575,
+      "rank_seconds": 10.586,
+      "top10": [
+        "sklearn/model_selection/_split.py",
+        "doc/tutorial/machine_learning_map/pyparsing.py",
+        "sklearn/base.py",
+        "sklearn/gaussian_process/kernels.py",
+        "sklearn/metrics/scorer.py",
+        "sklearn/tree/export.py",
+        "sklearn/tree/_reingold_tilford.py",
+        "sklearn/utils/_pprint.py",
+        "benchmarks/bench_plot_neighbors.py",
+        "setup.py"
+      ]
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-15100",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 27,
+      "repo": "scikit-learn/scikit-learn",
+      "gold_files": [
+        "sklearn/feature_extraction/text.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 534,
+      "export_seconds": 0.582,
+      "rank_seconds": 10.285,
+      "top10": [
+        "sklearn/feature_extraction/text.py",
+        "doc/tutorial/machine_learning_map/pyparsing.py",
+        "setup.py",
+        "doc/conf.py",
+        "benchmarks/bench_text_vectorizers.py",
+        "doc/sphinxext/sphinx_issues.py",
+        "examples/exercises/plot_cv_diabetes.py",
+        "benchmarks/bench_hist_gradient_boosting_higgsboson.py",
+        "examples/cluster/plot_feature_agglomeration_vs_univariate_selection.py",
+        "examples/cluster/plot_segmentation_toy.py"
+      ]
+    },
+    {
+      "instance_id": "scikit-learn__scikit-learn-25102",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 38,
+      "repo": "scikit-learn/scikit-learn",
+      "gold_files": [
+        "sklearn/base.py",
+        "sklearn/feature_selection/_base.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 619,
+      "export_seconds": 0.693,
+      "rank_seconds": 20.374,
+      "top10": [
+        "doc/tutorial/machine_learning_map/pyparsing.py",
+        "benchmarks/bench_random_projections.py",
+        "benchmarks/bench_saga.py",
+        "benchmarks/bench_plot_nmf.py",
+        "benchmarks/bench_multilabel_metrics.py",
+        "benchmarks/bench_plot_randomized_svd.py",
+        "doc/tutorial/machine_learning_map/parse_path.py",
+        "benchmarks/bench_isotonic.py",
+        "benchmarks/bench_hist_gradient_boosting_higgsboson.py",
+        "examples/inspection/plot_linear_model_coefficient_interpretation.py"
+      ]
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-10435",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 19,
+      "repo": "sphinx-doc/sphinx",
+      "gold_files": [
+        "sphinx/writers/latex.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 181,
+      "export_seconds": 0.637,
+      "rank_seconds": 7.284,
+      "top10": [
+        "sphinx/directives/patches.py",
+        "doc/usage/extensions/example_google.py",
+        "doc/conf.py",
+        "sphinx/highlighting.py",
+        "sphinx/application.py",
+        "sphinx/domains/c.py",
+        "setup.py",
+        "doc/development/tutorials/examples/recipe.py",
+        "sphinx/pygments_styles.py",
+        "sphinx/config.py"
+      ]
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-11445",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 21,
+      "repo": "sphinx-doc/sphinx",
+      "gold_files": [
+        "sphinx/util/rst.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 174,
+      "export_seconds": 0.413,
+      "rank_seconds": 6.29,
+      "top10": [
+        "sphinx/domains/__init__.py",
+        "sphinx/util/docutils.py",
+        "doc/conf.py",
+        "doc/usage/extensions/example_google.py",
+        "sphinx/application.py",
+        "doc/development/tutorials/examples/recipe.py",
+        "sphinx/transforms/i18n.py",
+        "sphinx/addnodes.py",
+        "doc/development/tutorials/examples/autodoc_intenum.py",
+        "sphinx/builders/latex/transforms.py"
+      ]
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-7440",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.5,
+      "first_gold_rank": 2,
+      "ranked": 21,
+      "repo": "sphinx-doc/sphinx",
+      "gold_files": [
+        "sphinx/domains/std.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 187,
+      "export_seconds": 0.402,
+      "rank_seconds": 7.049,
+      "top10": [
+        "sphinx/addnodes.py",
+        "sphinx/domains/std.py",
+        "sphinx/jinja2glue.py",
+        "sphinx/util/cfamily.py",
+        "sphinx/application.py",
+        "setup.py",
+        "sphinx/roles.py",
+        "doc/usage/extensions/example_google.py",
+        "sphinx/directives/__init__.py",
+        "doc/usage/extensions/example_numpy.py"
+      ]
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-7748",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.2,
+      "first_gold_rank": 5,
+      "ranked": 11,
+      "repo": "sphinx-doc/sphinx",
+      "gold_files": [
+        "sphinx/ext/autodoc/__init__.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 188,
+      "export_seconds": 0.632,
+      "rank_seconds": 5.821,
+      "top10": [
+        "sphinx/writers/text.py",
+        "doc/usage/extensions/example_google.py",
+        "doc/usage/extensions/example_numpy.py",
+        "sphinx/application.py",
+        "sphinx/ext/autodoc/__init__.py",
+        "sphinx/addnodes.py",
+        "setup.py",
+        "sphinx/config.py",
+        "sphinx/domains/cpp.py",
+        "doc/development/tutorials/examples/recipe.py"
+      ]
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-7910",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.02040816326530612,
+      "first_gold_rank": 49,
+      "ranked": 83,
+      "repo": "sphinx-doc/sphinx",
+      "gold_files": [
+        "sphinx/ext/napoleon/__init__.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 188,
+      "export_seconds": 0.369,
+      "rank_seconds": 5.411,
+      "top10": [
+        "setup.py",
+        "doc/usage/extensions/example_google.py",
+        "doc/usage/extensions/example_numpy.py",
+        "sphinx/addnodes.py",
+        "sphinx/application.py",
+        "sphinx/config.py",
+        "sphinx/deprecation.py",
+        "sphinx/errors.py",
+        "sphinx/events.py",
+        "sphinx/extension.py"
+      ]
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8035",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 18,
+      "repo": "sphinx-doc/sphinx",
+      "gold_files": [
+        "sphinx/ext/autodoc/__init__.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 188,
+      "export_seconds": 0.349,
+      "rank_seconds": 5.574,
+      "top10": [
+        "sphinx/application.py",
+        "doc/conf.py",
+        "sphinx/addnodes.py",
+        "sphinx/builders/html/__init__.py",
+        "doc/usage/extensions/example_google.py",
+        "sphinx/roles.py",
+        "doc/development/tutorials/examples/recipe.py",
+        "setup.py",
+        "sphinx/builders/latex/constants.py",
+        "sphinx/builders/linkcheck.py"
+      ]
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8120",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.5
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.1111111111111111,
+      "first_gold_rank": 9,
+      "ranked": 26,
+      "repo": "sphinx-doc/sphinx",
+      "gold_files": [
+        "sphinx/application.py",
+        "sphinx/locale/__init__.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 188,
+      "export_seconds": 0.346,
+      "rank_seconds": 5.221,
+      "top10": [
+        "sphinx/config.py",
+        "sphinx/io.py",
+        "sphinx/builders/__init__.py",
+        "sphinx/directives/code.py",
+        "doc/conf.py",
+        "setup.py",
+        "sphinx/addnodes.py",
+        "doc/usage/extensions/example_google.py",
+        "sphinx/application.py",
+        "doc/usage/extensions/example_numpy.py"
+      ]
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-8638",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 14,
+      "repo": "sphinx-doc/sphinx",
+      "gold_files": [
+        "sphinx/domains/python.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 182,
+      "export_seconds": 0.378,
+      "rank_seconds": 7.025,
+      "top10": [
+        "sphinx/domains/c.py",
+        "sphinx/domains/cpp.py",
+        "sphinx/project.py",
+        "doc/conf.py",
+        "doc/usage/extensions/example_google.py",
+        "sphinx/application.py",
+        "doc/development/tutorials/examples/todo.py",
+        "sphinx/addnodes.py",
+        "setup.py",
+        "doc/usage/extensions/example_numpy.py"
+      ]
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-9320",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.14285714285714285,
+      "first_gold_rank": 7,
+      "ranked": 19,
+      "repo": "sphinx-doc/sphinx",
+      "gold_files": [
+        "sphinx/cmd/quickstart.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 184,
+      "export_seconds": 0.361,
+      "rank_seconds": 6.525,
+      "top10": [
+        "doc/conf.py",
+        "sphinx/addnodes.py",
+        "sphinx/application.py",
+        "doc/usage/extensions/example_google.py",
+        "sphinx/builders/_epub_base.py",
+        "sphinx/builders/html/__init__.py",
+        "sphinx/cmd/quickstart.py",
+        "setup.py",
+        "sphinx/config.py",
+        "sphinx/builders/latex/transforms.py"
+      ]
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-9602",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.14285714285714285,
+      "first_gold_rank": 7,
+      "ranked": 14,
+      "repo": "sphinx-doc/sphinx",
+      "gold_files": [
+        "sphinx/domains/python.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 184,
+      "export_seconds": 0.427,
+      "rank_seconds": 5.349,
+      "top10": [
+        "sphinx/application.py",
+        "doc/usage/extensions/example_google.py",
+        "setup.py",
+        "sphinx/addnodes.py",
+        "sphinx/config.py",
+        "doc/conf.py",
+        "sphinx/domains/python.py",
+        "doc/usage/extensions/example_numpy.py",
+        "sphinx/setup_command.py",
+        "sphinx/events.py"
+      ]
+    },
+    {
+      "instance_id": "sphinx-doc__sphinx-9658",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.5,
+      "first_gold_rank": 2,
+      "ranked": 29,
+      "repo": "sphinx-doc/sphinx",
+      "gold_files": [
+        "sphinx/ext/autodoc/mock.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 184,
+      "export_seconds": 0.362,
+      "rank_seconds": 4.793,
+      "top10": [
+        "sphinx/addnodes.py",
+        "sphinx/ext/autodoc/mock.py",
+        "doc/usage/extensions/example_google.py",
+        "sphinx/application.py",
+        "sphinx/theming.py",
+        "doc/usage/extensions/example_numpy.py",
+        "sphinx/domains/cpp.py",
+        "sphinx/domains/python.py",
+        "sphinx/builders/linkcheck.py",
+        "sphinx/builders/__init__.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-11618",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.25,
+      "first_gold_rank": 4,
+      "ranked": 38,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/geometry/point.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 626,
+      "export_seconds": 0.715,
+      "rank_seconds": 24.755,
+      "top10": [
+        "sympy/geometry/line.py",
+        "sympy/geometry/line3d.py",
+        "sympy/geometry/plane.py",
+        "sympy/geometry/point.py",
+        "sympy/geometry/polygon.py",
+        "sympy/printing/python.py",
+        "sympy/liealgebras/type_a.py",
+        "sympy/liealgebras/type_b.py",
+        "sympy/liealgebras/type_c.py",
+        "sympy/liealgebras/type_d.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-12419",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.25,
+      "first_gold_rank": 4,
+      "ranked": 37,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/matrices/expressions/matexpr.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 630,
+      "export_seconds": 0.819,
+      "rank_seconds": 15.974,
+      "top10": [
+        "sympy/combinatorics/free_groups.py",
+        "sympy/combinatorics/perm_groups.py",
+        "sympy/stats/frv.py",
+        "sympy/matrices/expressions/matexpr.py",
+        "sympy/strategies/branch/core.py",
+        "sympy/assumptions/ask.py",
+        "sympy/core/numbers.py",
+        "sympy/polys/polyclasses.py",
+        "sympy/polys/polytools.py",
+        "sympy/polys/rings.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-12489",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 32,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/combinatorics/permutations.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 632,
+      "export_seconds": 0.672,
+      "rank_seconds": 16.208,
+      "top10": [
+        "sympy/categories/baseclasses.py",
+        "sympy/concrete/expr_with_limits.py",
+        "sympy/core/function.py",
+        "sympy/integrals/transforms.py",
+        "sympy/physics/quantum/operator.py",
+        "sympy/series/formal.py",
+        "sympy/series/fourier.py",
+        "sympy/utilities/benchmarking.py",
+        "setup.py",
+        "release/fabfile.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-13031",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 12,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/matrices/sparse.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 637,
+      "export_seconds": 0.665,
+      "rank_seconds": 17.582,
+      "top10": [
+        "sympy/matrices/common.py",
+        "setup.py",
+        "examples/advanced/curvilinear_coordinates.py",
+        "sympy/holonomic/linearsolver.py",
+        "sympy/matrices/matrices.py",
+        "sympy/combinatorics/perm_groups.py",
+        "sympy/core/basic.py",
+        "sympy/combinatorics/permutations.py",
+        "sympy/assumptions/sathandlers.py",
+        "sympy/core/compatibility.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-13091",
+      "recall": {
+        "1": 0.0,
+        "5": 0.047619047619047616,
+        "10": 0.047619047619047616
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.3333333333333333,
+      "first_gold_rank": 3,
+      "ranked": 31,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/core/basic.py",
+        "sympy/core/exprtools.py",
+        "sympy/core/numbers.py",
+        "sympy/geometry/entity.py",
+        "sympy/physics/optics/medium.py",
+        "sympy/physics/vector/dyadic.py",
+        "sympy/physics/vector/frame.py",
+        "sympy/physics/vector/vector.py",
+        "sympy/polys/agca/modules.py",
+        "sympy/polys/domains/domain.py",
+        "sympy/polys/domains/expressiondomain.py",
+        "sympy/polys/domains/pythonrational.py",
+        "sympy/polys/domains/quotientring.py",
+        "sympy/polys/fields.py",
+        "sympy/polys/monomials.py",
+        "sympy/polys/polyclasses.py",
+        "sympy/polys/polytools.py",
+        "sympy/polys/rings.py",
+        "sympy/polys/rootoftools.py",
+        "sympy/tensor/array/ndim_array.py",
+        "sympy/utilities/enumerative.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 644,
+      "export_seconds": 0.667,
+      "rank_seconds": 21.676,
+      "top10": [
+        "doc/ext/docscrape.py",
+        "examples/beginner/basic.py",
+        "sympy/core/basic.py",
+        "sympy/core/benchmarks/bench_basic.py",
+        "sympy/polys/densebasic.py",
+        "sympy/calculus/util.py",
+        "bin/authors_update.py",
+        "release/fabfile.py",
+        "sympy/calculus/singularities.py",
+        "sympy/assumptions/handlers/order.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-13372",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 23,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/core/evalf.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 671,
+      "export_seconds": 0.996,
+      "rank_seconds": 35.094,
+      "top10": [
+        "sympy/core/evalf.py",
+        "sympy/core/function.py",
+        "sympy/functions/elementary/miscellaneous.py",
+        "sympy/geometry/point.py",
+        "sympy/holonomic/holonomic.py",
+        "sympy/matrices/common.py",
+        "sympy/polys/domains/domain.py",
+        "sympy/vector/basisdependent.py",
+        "examples/all.py",
+        "release/fabfile.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-13877",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.5
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.16666666666666666,
+      "first_gold_rank": 6,
+      "ranked": 31,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/matrices/matrices.py",
+        "sympy/utilities/randtest.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 684,
+      "export_seconds": 0.77,
+      "rank_seconds": 32.782,
+      "top10": [
+        "sympy/matrices/expressions/determinant.py",
+        "sympy/assumptions/handlers/order.py",
+        "sympy/core/function.py",
+        "isympy.py",
+        "sympy/assumptions/handlers/matrices.py",
+        "sympy/matrices/matrices.py",
+        "sympy/physics/matrices.py",
+        "sympy/physics/hep/gamma_matrices.py",
+        "sympy/matrices/immutable.py",
+        "sympy/polys/polytools.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-15017",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 31,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/tensor/array/dense_ndim_array.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 747,
+      "export_seconds": 0.82,
+      "rank_seconds": 34.639,
+      "top10": [
+        "sympy/assumptions/ask.py",
+        "sympy/core/numbers.py",
+        "sympy/polys/polyclasses.py",
+        "sympy/polys/polytools.py",
+        "sympy/polys/rings.py",
+        "sympy/polys/domains/fractionfield.py",
+        "sympy/polys/domains/polynomialring.py",
+        "sympy/codegen/approximations.py",
+        "sympy/stats/joint_rv.py",
+        "sympy/stats/rv.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-16450",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 27,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/simplify/simplify.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 751,
+      "export_seconds": 0.831,
+      "rank_seconds": 37.359,
+      "top10": [
+        "sympy/simplify/simplify.py",
+        "sympy/assumptions/ask.py",
+        "sympy/assumptions/handlers/calculus.py",
+        "sympy/assumptions/handlers/common.py",
+        "sympy/core/symbol.py",
+        "sympy/physics/secondquant.py",
+        "sympy/physics/units/dimensions.py",
+        "sympy/stats/frv.py",
+        "sympy/stats/joint_rv.py",
+        "sympy/stats/rv.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-16792",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.0,
+      "first_gold_rank": null,
+      "ranked": 41,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/utilities/codegen.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 752,
+      "export_seconds": 1.137,
+      "rank_seconds": 33.953,
+      "top10": [
+        "sympy/utilities/autowrap.py",
+        "sympy/codegen/fnodes.py",
+        "sympy/assumptions/handlers/ntheory.py",
+        "sympy/assumptions/handlers/order.py",
+        "sympy/assumptions/handlers/sets.py",
+        "sympy/codegen/array_utils.py",
+        "sympy/core/expr.py",
+        "sympy/core/function.py",
+        "sympy/functions/elementary/piecewise.py",
+        "sympy/matrices/expressions/applyfunc.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-16886",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.07692307692307693,
+      "first_gold_rank": 13,
+      "ranked": 22,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/crypto/crypto.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 752,
+      "export_seconds": 0.984,
+      "rank_seconds": 33.824,
+      "top10": [
+        "sympy/combinatorics/graycode.py",
+        "sympy/combinatorics/free_groups.py",
+        "sympy/combinatorics/perm_groups.py",
+        "sympy/geometry/line.py",
+        "sympy/polys/polytools.py",
+        "sympy/polys/agca/ideals.py",
+        "sympy/polys/agca/modules.py",
+        "sympy/series/order.py",
+        "sympy/sets/conditionset.py",
+        "sympy/sets/contains.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-17630",
+      "recall": {
+        "1": 0.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 0.3333333333333333,
+      "first_gold_rank": 3,
+      "ranked": 37,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/matrices/expressions/matexpr.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 768,
+      "export_seconds": 1.073,
+      "rank_seconds": 34.652,
+      "top10": [
+        "sympy/matrices/expressions/blockmatrix.py",
+        "sympy/assumptions/handlers/matrices.py",
+        "sympy/matrices/expressions/matexpr.py",
+        "sympy/parsing/autolev/_antlr/autolevparser.py",
+        "sympy/assumptions/ask.py",
+        "sympy/core/numbers.py",
+        "sympy/polys/polyclasses.py",
+        "sympy/polys/polytools.py",
+        "sympy/polys/rings.py",
+        "sympy/polys/domains/fractionfield.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-18199",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 43,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/ntheory/residue_ntheory.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 778,
+      "export_seconds": 1.13,
+      "rank_seconds": 38.982,
+      "top10": [
+        "sympy/ntheory/residue_ntheory.py",
+        "sympy/concrete/expr_with_limits.py",
+        "sympy/core/function.py",
+        "sympy/integrals/transforms.py",
+        "sympy/matrices/expressions/applyfunc.py",
+        "sympy/physics/quantum/operator.py",
+        "sympy/series/formal.py",
+        "sympy/series/fourier.py",
+        "sympy/tensor/array/array_comprehension.py",
+        "sympy/utilities/benchmarking.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-18763",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.09090909090909091,
+      "first_gold_rank": 11,
+      "ranked": 22,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/printing/latex.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 776,
+      "export_seconds": 0.945,
+      "rank_seconds": 36.847,
+      "top10": [
+        "sympy/core/basic.py",
+        "sympy/core/function.py",
+        "sympy/matrices/common.py",
+        "sympy/physics/vector/dyadic.py",
+        "sympy/physics/vector/vector.py",
+        "sympy/polys/fields.py",
+        "sympy/polys/rings.py",
+        "sympy/strategies/rl.py",
+        "sympy/strategies/tools.py",
+        "sympy/printing/python.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-21930",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.14285714285714285,
+      "first_gold_rank": 7,
+      "ranked": 29,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/physics/secondquant.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 870,
+      "export_seconds": 1.267,
+      "rank_seconds": 44.926,
+      "top10": [
+        "sympy/printing/latex.py",
+        "sympy/codegen/fnodes.py",
+        "sympy/integrals/rubi/utility_function.py",
+        "sympy/polys/agca/modules.py",
+        "setup.py",
+        "isympy.py",
+        "sympy/physics/secondquant.py",
+        "release/fabfile.py",
+        "sympy/interactive/printing.py",
+        "examples/advanced/pyglet_plotting.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-23413",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": true
+      },
+      "reciprocal_rank": 0.16666666666666666,
+      "first_gold_rank": 6,
+      "ranked": 32,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/polys/matrices/normalforms.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 879,
+      "export_seconds": 1.492,
+      "rank_seconds": 42.325,
+      "top10": [
+        "sympy/matrices/immutable.py",
+        "sympy/matrices/expressions/matexpr.py",
+        "sympy/matrices/expressions/special.py",
+        "sympy/polys/polymatrix.py",
+        "sympy/matrices/normalforms.py",
+        "sympy/polys/matrices/normalforms.py",
+        "sympy/parsing/autolev/_antlr/autolevparser.py",
+        "sympy/polys/numberfields/modules.py",
+        "examples/advanced/curvilinear_coordinates.py",
+        "examples/intermediate/sample.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-23824",
+      "recall": {
+        "1": 0.0,
+        "5": 0.0,
+        "10": 0.0
+      },
+      "all_found": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "reciprocal_rank": 0.047619047619047616,
+      "first_gold_rank": 21,
+      "ranked": 50,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/physics/hep/gamma_matrices.py"
+      ],
+      "mentions_gold_path": true,
+      "candidate_files": 878,
+      "export_seconds": 1.667,
+      "rank_seconds": 43.126,
+      "top10": [
+        "sympy/combinatorics/fp_groups.py",
+        "sympy/combinatorics/free_groups.py",
+        "sympy/combinatorics/permutations.py",
+        "sympy/combinatorics/perm_groups.py",
+        "sympy/functions/special/bessel.py",
+        "sympy/integrals/rubi/utility_function.py",
+        "sympy/ntheory/elliptic_curve.py",
+        "sympy/polys/polyoptions.py",
+        "sympy/polys/polyquinticconst.py",
+        "sympy/polys/polytools.py"
+      ]
+    },
+    {
+      "instance_id": "sympy__sympy-24661",
+      "recall": {
+        "1": 1.0,
+        "5": 1.0,
+        "10": 1.0
+      },
+      "all_found": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "reciprocal_rank": 1.0,
+      "first_gold_rank": 1,
+      "ranked": 24,
+      "repo": "sympy/sympy",
+      "gold_files": [
+        "sympy/parsing/sympy_parser.py"
+      ],
+      "mentions_gold_path": false,
+      "candidate_files": 860,
+      "export_seconds": 1.284,
+      "rank_seconds": 28.107,
+      "top10": [
+        "sympy/parsing/sympy_parser.py",
+        "sympy/geometry/curve.py",
+        "sympy/parsing/ast_parser.py",
+        "sympy/assumptions/ask.py",
+        "sympy/stats/rv.py",
+        "isympy.py",
+        "sympy/__init__.py",
+        "doc/ext/docscrape.py",
+        "doc/src/conf.py",
+        "sympy/core/relational.py"
+      ]
+    }
+  ]
+}
