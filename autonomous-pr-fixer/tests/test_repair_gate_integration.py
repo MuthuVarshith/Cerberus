@@ -147,3 +147,10 @@ def test_temporary_throttling_cools_down_and_retries_the_task(tmp_path):
                        cooldown_seconds=5, sleep=slept.append)
     assert slept == [5]
     assert summary["metrics"]["final_status_breakdown"] == {"NO_PATCH": 2}
+
+
+def test_missing_checkout_is_a_setup_failure_not_a_crash(tmp_path):
+    task = RepairTask(repo_dir=str(tmp_path / "deleted-by-a-temp-cleaner"), issue_id="#1", title=fx.TITLE, body=fx.BODY,
+                      reproduction_test=fx.REPRO)
+    state = run_repair(task, fx.config(), model=FakeChatModel([]), run_id="m", out_root=str(tmp_path / "o"))
+    assert state.final_status == FinalStatus.SETUP_FAILURE

@@ -32,7 +32,10 @@ class RepairTask:
 
 
 def _head(repo_dir: str, ref: Optional[str]) -> str:
-    res = subprocess.run(["git", "rev-parse", ref or "HEAD"], cwd=repo_dir, capture_output=True, text=True)
+    try:
+        res = subprocess.run(["git", "rev-parse", ref or "HEAD"], cwd=repo_dir, capture_output=True, text=True)
+    except OSError:  # missing or unusable checkout; the workspace step reports it as SETUP_FAILURE
+        return ""
     return res.stdout.strip() if res.returncode == 0 else ""
 
 

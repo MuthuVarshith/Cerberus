@@ -218,7 +218,10 @@ def evaluate(config: RepairConfig, limit: Optional[int] = None, only: Optional[S
     if os.path.exists(out):
         raise FileExistsError(f"{out} exists; experiments are never overwritten.")
     os.makedirs(out)
-    with tempfile.TemporaryDirectory(prefix="cerberus_agent_eval_") as work:
+    # Task checkouts live under artifacts/, not %TEMP%: temp cleaners deleted one mid-run on Windows.
+    work_root = os.path.join(ROOT, "artifacts", "repair-eval-work")
+    os.makedirs(work_root, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=f"{experiment_id}-", dir=work_root) as work:
         if tasks is None:
             tasks = build_tasks(work, config.isolation)
         if only:
