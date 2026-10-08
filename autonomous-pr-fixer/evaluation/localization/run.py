@@ -20,25 +20,18 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Callable
 from typing import Any
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, ROOT)
 
+from repair.retrieval.methods import METHODS  # noqa: E402
 from repair.retrieval.metrics import KS, InstanceScore, aggregate, score_instance  # noqa: E402
-from repair.retrieval.source import materialize  # noqa: E402
+from repair.retrieval.source import materialize, python_files, read_sources  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MIRRORS = os.path.join(ROOT, "artifacts", "swebench", "mirrors")
 WORK = os.path.join(ROOT, "artifacts", "swebench", "work")
-
-Ranker = Callable[[str, str], list[str]]  # (workspace_dir, problem_statement) -> ranked files
-
-
-def _rankers() -> dict[str, Ranker]:
-    from repair.retrieval.baseline import phase1_ranking
-    return {"phase1": phase1_ranking}
 
 
 def mirror_for(repo: str) -> str:
@@ -58,13 +51,13 @@ def _table(agg: Any) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("--method", required=True, choices=sorted(_rankers()))
+    p.add_argument("--method", required=True, choices=sorted(METHODS))
     p.add_argument("--instances", default=os.path.join(HERE, "instances-v1.jsonl"))
     p.add_argument("--limit", type=int)
     p.add_argument("--out")
     args = p.parse_args(argv)
 
-    ranker = _rankers()[args.method]
+    method = METHODS[args.method]
     instances = load_instances(args.instances)[: args.limit]
     os.makedirs(WORK, exist_ok=True)
     per_instance: list[dict[str, Any]] = []
@@ -77,20 +70,23 @@ def main(argv: list[str] | None = None) -> int:
         ws = tempfile.mkdtemp(prefix="loc_", dir=WORK)
         try:
             t0 = time.perf_counter()
-            n_files = len(materialize(mirror, inst["base_commit"], ws))
+            paths = python_files(mirror, inst["base_commit"])
+            sources = read_sources(mirror, inst["base_commit"], paths)
+            if method.needs_files:
+                materialize(mirror, inst["base_commit"], ws)
             t1 = time.perf_counter()
-            ranking = ranker(ws, inst["problem_statement"])
+            ranking, timings = method.rank(ws, inst["problem_statement"], sources)
             t2 = time.perf_counter()
         finally:
             shutil.rmtree(ws, ignore_errors=True)
         s = score_instance(inst["instance_id"], ranking, set(inst["gold_files"]))
         scores.append(s)
         per_instance.append({**s.model_dump(), "repo": inst["repo"], "gold_files": inst["gold_files"],
-                             "mentions_gold_path": inst["mentions_gold_path"], "candidate_files": n_files,
+                             "mentions_gold_path": inst["mentions_gold_path"], "candidate_files": len(sources),
                              "export_seconds": round(t1 - t0, 3), "rank_seconds": round(t2 - t1, 3),
-                             "top10": ranking[:10]})
+                             "timings": {k: round(v, 4) for k, v in timings.items()}, "top10": ranking[:10]})
         print(f"[{i}/{len(instances)}] {inst['instance_id']}: first gold rank {s.first_gold_rank} "
-              f"of {n_files} files ({t2 - t1:.2f}s)")
+              f"of {len(sources)} files ({t2 - t1:.2f}s)", flush=True)
 
     if not scores:
         print("no instances scored")
@@ -111,6 +107,8 @@ def main(argv: list[str] | None = None) -> int:
         "issue_names_gold_file": aggregate(named).model_dump() if named else None,
         "issue_does_not_name_gold_file": aggregate(unnamed).model_dump() if unnamed else None,
         "median_rank_seconds": round(statistics.median(r["rank_seconds"] for r in per_instance), 3),
+        "median_timings": {k: round(statistics.median(r["timings"][k] for r in per_instance), 4)
+                           for k in per_instance[0]["timings"]},
         "median_candidate_files": statistics.median(r["candidate_files"] for r in per_instance),
         "instances": per_instance,
     }

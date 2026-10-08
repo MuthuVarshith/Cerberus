@@ -72,3 +72,87 @@ def test_source_export_is_text_only_and_skips_tests(mirror, tmp_path):
     written = materialize(bare, commit, str(out))
     assert sorted(written) == ["pkg/blob.py", "pkg/core.py"]
     assert not os.path.exists(out / "tests" / "test_core.py") and not os.path.exists(out / "README.md")
+
+
+# ------------------------------------------------------------------ chunking, BM25, aggregation
+
+from repair.retrieval.aggregate import files_from_chunks  # noqa: E402
+from repair.retrieval.bm25 import BM25Index, tokenize  # noqa: E402
+from repair.retrieval.chunking import MAX_CHUNK_LINES, Chunk, chunk_source  # noqa: E402
+
+SRC = '''import os
+from django.db import models
+
+LIMIT = 3
+
+
+class Identifier(Base):
+    """A SQL identifier."""
+    kind = "name"
+
+    def get_real_name(self):
+        """Return the real name."""
+        return self.tokens[-1]
+
+    class Meta:
+        def inner(self):
+            return 1
+
+
+@cached
+def parse(sql):
+    return sql.split()
+
+
+if __name__ == "__main__":
+    parse("x")
+'''
+
+
+def test_chunks_cover_functions_classes_methods_and_module_code():
+    chunks = chunk_source("pkg/sql.py", SRC)
+    by_symbol = {c.symbol: c for c in chunks}
+    assert by_symbol["Identifier"].kind == "class" and by_symbol["Identifier"].docstring == "A SQL identifier."
+    m = by_symbol["Identifier.get_real_name"]
+    assert m.kind == "method" and m.start_line == 11 and m.end_line == 13 and m.docstring == "Return the real name."
+    assert by_symbol["Identifier.Meta.inner"].kind == "method"
+    p = by_symbol["parse"]
+    assert p.kind == "function" and p.start_line == 20 and "@cached" in p.text
+    modules = [c for c in chunks if c.kind == "module"]
+    assert modules and any("LIMIT = 3" in c.text for c in modules) and any("__main__" in c.text for c in modules)
+    assert all(c.imports == ("os", "django.db") for c in chunks)
+
+
+def test_long_definitions_are_windowed_and_broken_files_fall_back():
+    body = "\n".join(f"    x{i} = {i}" for i in range(MAX_CHUNK_LINES + 40))
+    chunks = chunk_source("big.py", f"def big():\n{body}\n")
+    assert len(chunks) >= 2 and all(c.symbol == "big" and c.end_line - c.start_line < MAX_CHUNK_LINES for c in chunks)
+    broken = chunk_source("bad.py", "def (:\n  ))) this is not python\n" * 5)
+    assert broken and all(c.kind == "window" for c in broken)
+    assert chunk_source("empty.py", "") == []
+
+
+def test_tokenize_splits_snake_and_camel_and_keeps_whole_identifiers():
+    toks = tokenize("get_real_name HTTPResponseError self.return")
+    assert {"get_real_name", "get", "real", "name", "httpresponseerror", "http", "response", "error"} <= set(toks)
+    assert "self" not in toks and "return" not in toks
+
+
+def test_bm25_prefers_the_relevant_chunk_and_is_deterministic():
+    chunks = [Chunk("a/sql.py", "Identifier.get_real_name", "method", 1, 3, "def get_real_name(self): ..."),
+              Chunk("a/other.py", "unrelated", "function", 1, 3, "def unrelated(): return 42"),
+              Chunk("a/names.py", "alias", "function", 1, 3, "def alias(): name = real")]
+    index = BM25Index(chunks)
+    hits = index.search("get_real_name returns the wrong component")
+    assert hits[0][0].path == "a/sql.py"
+    assert index.search("get_real_name returns the wrong component") == hits
+    assert index.search("zzzz qqqq") == []
+
+
+def test_file_aggregation_max_and_sum_top3():
+    c = lambda p: Chunk(p, "s", "function", 1, 1, "")  # noqa: E731
+    scored = [(c("a.py"), 5.0), (c("b.py"), 4.0), (c("b.py"), 3.0), (c("b.py"), 2.0), (c("c.py"), 4.0)]
+    assert files_from_chunks(scored, "max") == ["a.py", "b.py", "c.py"]
+    assert files_from_chunks(scored, "sum_top3") == ["b.py", "a.py", "c.py"]
+    with pytest.raises(ValueError):
+        files_from_chunks(scored, "median")
