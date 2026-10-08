@@ -91,7 +91,8 @@ def estimate_cost(model: str, usage: Usage) -> Optional[float]:
 
 
 def create_model(provider: str, model: str, effort: Optional[str] = None, server_fallbacks: bool = True,
-                 min_interval: float = 0.0) -> ChatModel:
+                 min_interval: float = 0.0, temperature: Optional[float] = None,
+                 seed: Optional[int] = None) -> ChatModel:
     provider = provider.lower()
     if provider == "anthropic":
         from repair.llm.anthropic import AnthropicChatModel
@@ -100,8 +101,10 @@ def create_model(provider: str, model: str, effort: Optional[str] = None, server
         import os
         from repair.llm.openai_compat import GEMINI_BASE_URL, OpenAICompatChatModel
         key_env = "GEMINI_API_KEY" if os.environ.get("GEMINI_API_KEY") else "GOOGLE_API_KEY"
-        return OpenAICompatChatModel(model, GEMINI_BASE_URL, key_env, reasoning_effort=effort, min_interval=min_interval)
+        return OpenAICompatChatModel(model, GEMINI_BASE_URL, key_env, reasoning_effort=effort, min_interval=min_interval,
+                                     temperature=temperature, seed=seed)
     if provider == "openrouter":
         from repair.llm.openai_compat import OPENROUTER_BASE_URL, OpenAICompatChatModel
-        return OpenAICompatChatModel(model, OPENROUTER_BASE_URL, "OPENROUTER_API_KEY", min_interval=min_interval)
+        return OpenAICompatChatModel(model, OPENROUTER_BASE_URL, "OPENROUTER_API_KEY", min_interval=min_interval,
+                                     temperature=temperature, seed=seed)
     raise LLMError(f"Unsupported LLM_PROVIDER '{provider}'. Supported: anthropic, gemini, openrouter.")

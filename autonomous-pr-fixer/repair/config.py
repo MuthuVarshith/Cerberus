@@ -62,6 +62,8 @@ class RepairConfig(BaseModel):
     isolation: Optional[str] = None  # None -> Cerberus default (docker)
     retrieval: Optional[str] = Field(None, description="None (Phase 1 tools only), bm25, hybrid-bge-small, hybrid-jina-code")
     min_seconds_between_calls: float = Field(0.0, ge=0, description="Client-side spacing for rate-limited (free) tiers")
+    temperature: Optional[float] = Field(None, ge=0, description="Sent to OpenAI-compatible providers when set")
+    seed: Optional[int] = Field(None, description="Sent to OpenAI-compatible providers when set; not all honour it")
     input_price_per_mtok: Optional[float] = Field(None, ge=0, description="Overrides the built-in price table (USD)")
     output_price_per_mtok: Optional[float] = Field(None, ge=0)
 
@@ -86,6 +88,8 @@ class RepairConfig(BaseModel):
             provider=provider,
             model=model,
             min_seconds_between_calls=_env_float("LLM_MIN_SECONDS_BETWEEN_CALLS", MIN_INTERVAL.get(provider, 0.0)),
+            temperature=_env_float("LLM_TEMPERATURE", -1.0) if _env("LLM_TEMPERATURE", "") else None,
+            seed=_env_int("LLM_SEED", 0) if _env("LLM_SEED", "") else None,
             input_price_per_mtok=_price("LLM_INPUT_PRICE_PER_MTOK"),
             output_price_per_mtok=_price("LLM_OUTPUT_PRICE_PER_MTOK"),
             retrieval=_retrieval_env(),

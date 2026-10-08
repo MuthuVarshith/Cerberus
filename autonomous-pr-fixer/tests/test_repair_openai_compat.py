@@ -159,3 +159,18 @@ def test_persistent_error_inside_a_200_body_becomes_an_http_error():
     m.max_retries = 2
     with pytest.raises(LLMError, match="HTTP 503"):
         m.complete("s", [Message("user", "x")], [], 100)
+
+
+def test_temperature_and_seed_are_sent_only_when_configured():
+    seen = []
+
+    def handler(req):
+        seen.append(json.loads(req.content))
+        return _ok(content="ok")
+
+    m = _model(handler)
+    m.complete("s", [Message("user", "x")], [], 100)
+    assert "temperature" not in seen[0] and "seed" not in seen[0]
+    m.temperature, m.seed = 0.0, 7
+    m.complete("s", [Message("user", "x")], [], 100)
+    assert seen[1]["temperature"] == 0.0 and seen[1]["seed"] == 7

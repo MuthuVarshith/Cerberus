@@ -261,7 +261,8 @@ def evaluate(config: RepairConfig, limit: Optional[int] = None, only: Optional[S
             else:
                 printer(f"\n=== {t.task_id} ({t.source}) ===")
                 for run_no in range(1, 3):
-                    model = model_factory() if model_factory else create_model(config.provider, config.model, config.effort, config.server_fallbacks, config.min_seconds_between_calls)
+                    model = model_factory() if model_factory else create_model(config.provider, config.model, config.effort, config.server_fallbacks, config.min_seconds_between_calls,
+                             temperature=config.temperature, seed=config.seed)
                     suffix = "" if run_no == 1 else f"-retry{run_no - 1}"
                     state = run_repair(t.task, config, model=model, run_id=f"{experiment_id}-{t.task_id}{suffix}",
                                        out_root=os.path.join(out, "runs"), printer=printer)

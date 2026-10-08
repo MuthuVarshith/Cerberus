@@ -104,6 +104,41 @@ be read is a refusal, never a pass.
   <img src="docs/assets/02-pipeline-and-run.png" alt="The pipeline stages alongside the terminal output of a real admitted run" width="860">
 </p>
 
+### Cerberus 2.0: repair agent and code retrieval
+
+```mermaid
+flowchart LR
+    issue["Issue + reproduction test"] --> agent
+
+    subgraph agentbox["Repair agent (repair/)"]
+        agent["One tool-calling model<br/>Anthropic · Gemini · OpenRouter"]
+        tools["Sandboxed tools<br/>search · read · symbols · tests<br/>git diff · edit · apply patch"]
+        retrieve["retrieve_code (optional)<br/>BM25 / hybrid over Tree-sitter chunks<br/>index cached per commit"]
+        agent <--> tools
+        agent <--> retrieve
+    end
+
+    agent -- "workspace diff<br/>(submit_patch)" --> gate
+
+    subgraph gatebox["Cerberus gate (unchanged)"]
+        gate["RED ×3 → BASELINE → GREEN ×3<br/>→ REGRESSION → SCOPE → ADMISSION"]
+    end
+
+    gate -- "REFUSED + structured feedback<br/>(bounded retries)" --> agent
+    gate -- ADMITTED --> pr["run.json evidence<br/>→ Check Run / draft PR"]
+
+    tools -. "repository code runs only here" .-> sandbox[("Docker sandbox<br/>offline · no capabilities<br/>CPU / memory / PID limits")]
+    gate -.-> sandbox
+    agent -. "traces" .-> langfuse[("Langfuse")]
+```
+
+The agent proposes; the unchanged gate decides. Every submission is an ordinary gate run, and the agent
+cannot edit tests, verification files or its own verdict. Retrieval is measured separately on a
+120-instance SWE-bench Verified localization benchmark (BM25 over code chunks: Recall@10 0.864 vs 0.487
+for the Phase 1 localizer, paired p < 0.001). Details: [`docs/cerberus-agent.md`](docs/cerberus-agent.md),
+[`docs/phase1-results.md`](docs/phase1-results.md),
+[`autonomous-pr-fixer/evaluation/phase2_report.md`](autonomous-pr-fixer/evaluation/phase2_report.md).
+
 ## Verification Gates
 
 | Gate | What it verifies |
