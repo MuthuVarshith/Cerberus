@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import os
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import lru_cache
 from typing import Any
 
@@ -20,7 +20,8 @@ from repair.retrieval.chunking import Chunk
 CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                          "artifacts", "retrieval-cache")
 MAX_CHARS = 1500  # ~400–500 tokens: keeps CPU embedding time bounded; long chunks keep their head
-BATCH = 64
+BATCH = 16  # measured faster than 64 on this CPU
+SAVE_EVERY = 512
 
 MODELS = {
     "jina-code": "jinaai/jina-embeddings-v2-base-code",
@@ -35,7 +36,7 @@ def embed_text(chunk: Chunk) -> str:
 @lru_cache(maxsize=4)
 def _model(name: str) -> Any:
     from fastembed import TextEmbedding
-    return TextEmbedding(model_name=name, cache_dir=os.path.join(CACHE_DIR, "models"))
+    return TextEmbedding(model_name=name, cache_dir=os.path.join(CACHE_DIR, "models"), threads=os.cpu_count())
 
 
 class EmbeddingCache:
@@ -47,6 +48,7 @@ class EmbeddingCache:
         self.db.execute("CREATE TABLE IF NOT EXISTS vec (h TEXT PRIMARY KEY, v BLOB)")
         self.hits = 0
         self.misses = 0
+        self.progress: Callable[[int, int], None] | None = None
 
     def embed_documents(self, texts: Sequence[str]) -> np.ndarray:
         keys = [hashlib.sha256(t.encode("utf-8", "replace")).hexdigest() for t in texts]
@@ -61,13 +63,17 @@ class EmbeddingCache:
         self.misses += len(missing)
         if missing:
             model = _model(self.model_name)
-            todo = [texts[i] for i in missing]
-            vectors = list(model.passage_embed(todo, batch_size=BATCH))
-            with self.db:
-                for i, vec in zip(missing, vectors, strict=True):
-                    arr = np.asarray(vec, dtype=np.float32)
-                    found[keys[i]] = arr
-                    self.db.execute("INSERT OR REPLACE INTO vec VALUES (?, ?)", (keys[i], arr.tobytes()))
+            # Commit every SAVE_EVERY vectors so a long run interrupted midway resumes from the cache.
+            for s in range(0, len(missing), SAVE_EVERY):
+                part = missing[s:s + SAVE_EVERY]
+                vectors = list(model.passage_embed([texts[i] for i in part], batch_size=BATCH))
+                with self.db:
+                    for i, vec in zip(part, vectors, strict=True):
+                        arr = np.asarray(vec, dtype=np.float32)
+                        found[keys[i]] = arr
+                        self.db.execute("INSERT OR REPLACE INTO vec VALUES (?, ?)", (keys[i], arr.tobytes()))
+                if self.progress:
+                    self.progress(s + len(part), len(missing))
         return np.stack([found[k] for k in keys]) if keys else np.zeros((0, 0), dtype=np.float32)
 
     def embed_query(self, text: str) -> np.ndarray:

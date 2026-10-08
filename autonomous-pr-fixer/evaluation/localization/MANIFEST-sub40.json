@@ -1,0 +1,23 @@
+{
+  "subset": "cerberus-localization-v1-sub40",
+  "seed": 20261009,
+  "instances": 40,
+  "excluded_repos": [
+    "matplotlib/matplotlib",
+    "sympy/sympy"
+  ],
+  "per_repo": {
+    "astropy/astropy": 2,
+    "django/django": 22,
+    "mwaskom/seaborn": 1,
+    "pallets/flask": 1,
+    "psf/requests": 1,
+    "pydata/xarray": 2,
+    "pylint-dev/pylint": 1,
+    "pytest-dev/pytest": 2,
+    "scikit-learn/scikit-learn": 3,
+    "sphinx-doc/sphinx": 5
+  },
+  "mentions_gold_path": 12,
+  "sha256": "b74e7861f8cbbf0f35b8a9fa5e2aa985020591907f0d53162f83cdfe2d71ba26"
+}
