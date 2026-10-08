@@ -49,6 +49,9 @@ def _bm25(aggregation: str) -> RankFn:
     return rank
 
 
+# Frozen for every retriever after the BM25 runs on the 120 instances (sum_top3 was picked post hoc there;
+# fixing it now keeps the vector/hybrid/rerank comparisons from being tuned on the same test set).
+AGGREGATION = "sum_top3"
 CANDIDATES = 300   # chunks taken from each retriever before file aggregation / fusion
 RERANK_TOP = 30    # fused chunks passed to the cross-encoder
 
@@ -69,7 +72,7 @@ def _vector(model_key: str) -> RankFn:
         index, timings = _vector_index(model_key, chunks)
         try:
             t0 = time.perf_counter()
-            ranking = files_from_chunks(index.search(problem, CANDIDATES), "sum_top3")
+            ranking = files_from_chunks(index.search(problem, CANDIDATES), AGGREGATION)
             timings["query_seconds"] = time.perf_counter() - t0
         finally:
             index.close()
@@ -88,12 +91,12 @@ def _hybrid(model_key: str, rerank_top: int = 0) -> RankFn:
             t1 = time.perf_counter()
             lexical = bm25.search(problem, CANDIDATES)
             dense = index.search(problem, CANDIDATES)
-            fused_files = rrf([files_from_chunks(lexical, "sum_top3"), files_from_chunks(dense, "sum_top3")])
+            fused_files = rrf([files_from_chunks(lexical, AGGREGATION), files_from_chunks(dense, AGGREGATION)])
             timings["query_seconds"] = time.perf_counter() - t1
             if rerank_top:
                 t2 = time.perf_counter()
                 fused_chunks = rrf([[c for c, _ in lexical], [c for c, _ in dense]])[:rerank_top]
-                reranked = files_from_chunks(rerank(problem, fused_chunks), "max")
+                reranked = files_from_chunks(rerank(problem, fused_chunks), AGGREGATION)
                 # Reranked files first, then the rest of the fused file ranking.
                 fused_files = list(dict.fromkeys(reranked + fused_files))
                 timings["rerank_seconds"] = time.perf_counter() - t2
