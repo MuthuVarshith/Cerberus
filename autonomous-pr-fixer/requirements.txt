@@ -1,3 +1,5 @@
+# Direct runtime dependencies (mirror of pyproject.toml: core + [retrieval] + [langgraph]).
+# Exact versions: requirements.lock. SWE-bench harness: pip install -e ".[swebench]".
 fastapi>=0.115.0
 uvicorn>=0.34.0
 pydantic>=2.10.0
@@ -11,3 +13,8 @@ pyyaml>=6.0
 cryptography>=42.0
 anthropic>=1.0
 langfuse>=3,<4
+numpy>=2.0
+qdrant-client>=1.12
+fastembed>=0.5
+langgraph>=1.0
+langgraph-checkpoint-sqlite>=3.0
