@@ -1,0 +1,18 @@
+{
+  "dataset": "SWE-bench Verified (princeton-nlp/SWE-bench_Verified), test split, 500 rows",
+  "parquet_sha256": "a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd",
+  "subset_file": "subset-v1.jsonl",
+  "subset_sha256": "99878bad93adf9649bc60fbafcab3c5eb93e9088c6c64e3ddb53efef8170a434",
+  "selection_rule": "instances whose (repo, version) has a Python-3.11 recipe in evaluation/swebench_tasks.py RECIPES and whose FAIL_TO_PASS tests extract into a standalone module; ordered by sha256('cerberus-swebench-v1:' + instance_id); first 25",
+  "seed": "cerberus-swebench-v1",
+  "eligible": 29,
+  "extraction_skipped": [],
+  "excluded_repos": {
+    "django/django": "tests run with tests/runtests.py, not pytest; the gate needs pytest JUnit output",
+    "sympy/sympy": "uses its own bin/test runner conventions and very large test modules; deferred",
+    "matplotlib/matplotlib": "needs a compiler and pinned freetype for image tests; sandbox image has no compiler",
+    "scikit-learn/scikit-learn": "C/Cython extensions need a compiler (not in the sandbox image)",
+    "astropy/astropy": "C extensions need a compiler (not in the sandbox image)",
+    "mwaskom/seaborn": "pinned SWE-bench env (pandas 1.3.5) has no Python 3.11 wheels"
+  }
+}
