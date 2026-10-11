@@ -7,6 +7,10 @@ Triggers
   - PR comment starting with `/cerberus verify`, by a user with write access
   - issue comment starting with `/cerberus repair`, by a user with write access,
     only when the server has a patch source configured
+  - issue labelled `cerberus-fix`, or issue comment `/cerberus fix|approve|reject`
+    (see github/issue_service.py and docs/phase-4-github.md); write access is
+    checked through the API on every command
+  - no automatic runs on pull requests from forks
 
 Verification of a pull request
   - The reproduction test is the single new test file the PR adds: it must fail
@@ -35,7 +39,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from github.check_report import check_run_output
 from github.client import GitHubClient
-from github.pr_publisher import _auth_env
+from github.issue_commands import FIX_LABEL, ISSUE_COMMANDS, TRUSTED_ASSOCIATIONS, parse_command, reproduction_test_problem
+from github.pr_publisher import _auth_env, redact_secrets
 from github.run_store import RunStore
 from harness.docker_sandbox import ISOLATION_DOCKER, host_unsafe_environment, resolve_isolation
 from harness.scope_gate import is_test_path
@@ -43,6 +48,7 @@ from harness.scope_gate import is_test_path
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 TRIGGER_LABEL = "cerberus"
 WRITE_PERMISSIONS = {"admin", "maintain", "write"}
+ISSUE_KINDS = ("issue_fix", "issue_approve", "issue_reject")
 _LINKED_ISSUE_RE = re.compile(r"\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\s+#(\d+)\b", re.IGNORECASE)
 _REPRO_BLOCK_RE = re.compile(r"```python\s*\n(.*?)```", re.DOTALL)
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -60,6 +66,8 @@ class AppSettings:
     repair_patch_source: str = "none"  # none | llm | claude-code
     publish_repairs: bool = False
     allow_host_sandbox_for_tests: bool = False
+    retrieval: str = "none"            # retriever for issue repairs (CERBERUS_RETRIEVAL / RETRIEVAL)
+    user_cooldown_seconds: int = 60    # minimum gap between runs started by one user
 
     @property
     def repos_dir(self) -> str:
@@ -89,6 +97,8 @@ class AppSettings:
             run_timeout_seconds=int(os.environ.get("CERBERUS_RUN_TIMEOUT_SECONDS", "3600")),
             repair_patch_source=os.environ.get("CERBERUS_REPAIR_PATCH_SOURCE", "none"),
             publish_repairs=os.environ.get("CERBERUS_PUBLISH_REPAIRS", "0") == "1",
+            retrieval=os.environ.get("CERBERUS_RETRIEVAL") or os.environ.get("RETRIEVAL") or "none",
+            user_cooldown_seconds=int(os.environ.get("CERBERUS_USER_COOLDOWN_SECONDS", "60")),
         )
 
 
@@ -169,6 +179,9 @@ class CerberusApp:
         self._repo_locks: Dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
         os.makedirs(settings.artifacts_dir, exist_ok=True)
+        from github.issue_service import IssueRepairService
+
+        self.issues = IssueRepairService(self)
 
     # ------------------------------------------------------------ routing
 
@@ -187,12 +200,24 @@ class CerberusApp:
 
         job: Optional[Job] = None
         needs_permission = True
-        if event == "pull_request":
+        association: Optional[str] = None
+        if event == "issues" and action == "labeled":
+            issue = payload.get("issue") or {}
+            if (payload.get("label") or {}).get("name", "").lower() != FIX_LABEL or issue.get("pull_request"):
+                return {"status": "ignored", "reason": "issues event without the cerberus-fix trigger"}, None
+            job = Job(self._new_run_id(), "issue_fix", owner, repo, int(issue["number"]), int(installation),
+                      sender.get("login", ""), extra={"issue_body": issue.get("body") or "",
+                                                      "default_branch": repository.get("default_branch", "")})
+        elif event == "pull_request":
             pr = payload.get("pull_request") or {}
             labels = {lbl.get("name", "").lower() for lbl in pr.get("labels", [])}
             if action == "labeled" and (payload.get("label") or {}).get("name", "").lower() == TRIGGER_LABEL:
                 pass
             elif action in ("synchronize", "reopened") and TRIGGER_LABEL in labels:
+                head_repo = ((pr.get("head") or {}).get("repo") or {}).get("full_name")
+                if head_repo != full_name:
+                    return {"status": "ignored", "reason": "no automatic runs on pull requests from forks; "
+                                                           "a maintainer can comment /cerberus verify"}, None
                 # A maintainer opted the PR in by labelling it; new commits are re-verified.
                 needs_permission = False
             else:
@@ -205,7 +230,18 @@ class CerberusApp:
             first_line = (comment.get("body") or "").strip().splitlines()[0:1]
             command = first_line[0].strip().lower() if first_line else ""
             actor = (comment.get("user") or {}).get("login", "")
-            if command.startswith("/cerberus verify") and issue.get("pull_request"):
+            parsed = parse_command(comment.get("body") or "")
+            if parsed and parsed.name in ISSUE_COMMANDS:
+                if issue.get("pull_request"):
+                    return {"status": "ignored", "reason": f"/cerberus {parsed.name} is an issue command"}, None
+                kind = {"fix": "issue_fix", "approve": "issue_approve", "reject": "issue_reject"}[parsed.name]
+                run_id = self._new_run_id() if kind == "issue_fix" else f"review_{uuid.uuid4().hex[:12]}"
+                job = Job(run_id, kind, owner, repo, int(issue["number"]), int(installation), actor,
+                          comment_body=parsed.note,
+                          extra={"target_run_id": parsed.run_id, "issue_body": issue.get("body") or "",
+                                 "default_branch": repository.get("default_branch", "")})
+                association = str(comment.get("author_association") or "NONE").upper()
+            elif command.startswith("/cerberus verify") and issue.get("pull_request"):
                 job = Job(self._new_run_id(), "verify_pr", owner, repo, int(issue["number"]), int(installation), actor)
             elif command.startswith("/cerberus repair") and not issue.get("pull_request"):
                 job = Job(self._new_run_id(), "repair", owner, repo, int(issue["number"]), int(installation), actor,
@@ -219,6 +255,8 @@ class CerberusApp:
             return {"status": "ignored", "reason": "duplicate delivery"}, None
 
         client = self.client_factory(self.token_for_installation(job.installation_id))
+        if job.kind in ISSUE_KINDS:
+            return self._route_issue(client, delivery_id, job, association)
         if needs_permission:
             permission = client.collaborator_permission(owner, repo, job.requested_by)
             if permission not in WRITE_PERMISSIONS:
@@ -227,10 +265,49 @@ class CerberusApp:
             client.create_issue_comment(owner, repo, job.number,
                                         "Cerberus repair is not enabled on this server (no patch source configured).")
             return {"status": "ignored", "reason": "repair is not enabled"}, None
-        if self.store.runs_since(job.slug, 3600) >= self.settings.max_runs_per_hour:
-            return {"status": "rate_limited", "reason": f"more than {self.settings.max_runs_per_hour} runs in the last hour"}, None
+        limited = self._rate_limit(job) if needs_permission else None
+        if limited:
+            return {"status": "rate_limited", "reason": limited}, None
 
         self.store.create_run(job.run_id, delivery_id, job.slug, job.kind, job.number, job.head_sha, job.requested_by)
+        return {"status": "queued", "run_id": job.run_id, "kind": job.kind}, job
+
+    def _rate_limit(self, job: Job) -> Optional[str]:
+        import time
+
+        last = self.store.last_trigger_by(job.requested_by)
+        if last is not None and time.time() - last < self.settings.user_cooldown_seconds:
+            return f"{job.requested_by} started a run less than {self.settings.user_cooldown_seconds}s ago"
+        if self.store.runs_since(job.slug, 3600) >= self.settings.max_runs_per_hour:
+            return f"more than {self.settings.max_runs_per_hour} runs in the last hour"
+        return None
+
+    def _route_issue(self, client: GitHubClient, delivery_id: str, job: Job,
+                     association: Optional[str]) -> Tuple[Dict[str, Any], Optional[Job]]:
+        """Authorize and queue /cerberus fix|approve|reject (or the cerberus-fix label)."""
+        def refuse(reason: str, text: str) -> Tuple[Dict[str, Any], None]:
+            client.create_issue_comment(job.owner, job.repo, job.number, text)
+            return {"status": "ignored", "reason": reason}, None
+
+        polite = (f"Sorry @{job.requested_by}, only repository owners, members and collaborators with write access "
+                  "can run Cerberus commands.")
+        # Comments carry author_association; label events do not, so the API check below is the gate for both.
+        if association is not None and association not in TRUSTED_ASSOCIATIONS:
+            return refuse(f"{job.requested_by} is not an owner, member or collaborator", polite)
+        if client.collaborator_permission(job.owner, job.repo, job.requested_by) not in WRITE_PERMISSIONS:
+            return refuse(f"{job.requested_by} does not have write access", polite)
+        if job.kind != "issue_fix":
+            return {"status": "queued", "kind": job.kind}, job
+        problem = reproduction_test_problem(job.extra.get("issue_body", ""))
+        if problem:
+            from github.issue_service import missing_repro_comment
+            return refuse("no reproduction test", missing_repro_comment(problem))
+        limited = self._rate_limit(job)
+        if limited:
+            return refuse("rate limited", f"Cerberus is rate limited: {limited}. Try again later.")
+        self.store.create_run(job.run_id, delivery_id, job.slug, job.kind, job.number, None, job.requested_by)
+        self.store.create_issue_run(job.run_id, job.slug, job.number, installation_id=job.installation_id,
+                                    requested_by=job.requested_by, source=job.extra.get("source", "github"))
         return {"status": "queued", "run_id": job.run_id, "kind": job.kind}, job
 
     @staticmethod
@@ -246,8 +323,18 @@ class CerberusApp:
     def execute(self, job: Job) -> None:
         with self._lock_for(job.slug):
             try:
-                self._execute(job)
+                if job.kind == "issue_fix":
+                    self.issues.run_fix(job)
+                elif job.kind == "issue_approve":
+                    self.issues.approve(job)
+                elif job.kind == "issue_reject":
+                    self.issues.reject(job)
+                else:
+                    self._execute(job)
             except Exception as exc:  # recorded, never raised into the web server
+                if job.kind in ISSUE_KINDS:
+                    self.issues.on_crash(job, redact_secrets(f"{type(exc).__name__}: {exc}")[:2000])
+                    return
                 self.store.update_run(job.run_id, status="finished", final_state="ERROR", error=f"{type(exc).__name__}: {exc}"[:2000])
 
     def _execute(self, job: Job) -> None:

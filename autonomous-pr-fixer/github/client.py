@@ -99,6 +99,9 @@ class GitHubClient:
     def update_issue_comment(self, owner: str, repo: str, comment_id: int, body: str) -> None:
         self._call("PATCH", f"/repos/{owner}/{repo}/issues/comments/{int(comment_id)}", {"body": _clip(body)})
 
+    def get_repo(self, owner: str, repo: str) -> Dict[str, Any]:
+        return self._call("GET", f"/repos/{owner}/{repo}")
+
     def get_branch(self, owner: str, repo: str, branch: str) -> Dict[str, Any]:
         from urllib.parse import quote
 
