@@ -66,6 +66,10 @@ class RepairConfig(BaseModel):
     seed: Optional[int] = Field(None, description="Sent to OpenAI-compatible providers when set; not all honour it")
     input_price_per_mtok: Optional[float] = Field(None, ge=0, description="Overrides the built-in price table (USD)")
     output_price_per_mtok: Optional[float] = Field(None, ge=0)
+    orchestrator: str = Field("loop", pattern="^(loop|langgraph)$",
+                              description="loop (Phase 1 agent loop) or langgraph (Phase 3 graph)")
+    review: bool = Field(False, description="langgraph only: pause admitted patches for human approval")
+    checkpoint_db: Optional[str] = Field(None, description="langgraph SQLite checkpoint file (default: <out_root>)")
 
     @classmethod
     def from_env(cls, **overrides) -> "RepairConfig":
@@ -100,6 +104,9 @@ class RepairConfig(BaseModel):
             max_cost_per_task=_env_float("MAX_COST_PER_TASK", 1.25),
             max_evaluation_cost=_env_float("MAX_EVALUATION_COST", 15.0),
             effort=_env("LLM_EFFORT", "medium"),
+            orchestrator=_env("ORCHESTRATOR", "loop").lower(),
+            review=_env("HUMAN_REVIEW", "false").lower() in ("1", "true", "yes"),
+            checkpoint_db=_env("GRAPH_CHECKPOINT_DB", "") or None,
             server_fallbacks=_env("LLM_SERVER_FALLBACKS", "true").lower() not in ("0", "false", "no"),
         )
         values.update({k: v for k, v in overrides.items() if v is not None})
