@@ -280,6 +280,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     tmp = os.path.join(ROOT, "artifacts", "tmp")
     os.makedirs(tmp, exist_ok=True)
     tempfile.tempdir = tmp
+    # Per-command sandbox timeout for the gate's own git commands (default 60 s). On large repos and a slow
+    # CPU, `git diff` against the base exceeded it and the gate saw an empty diff (EMPTY_PATCH).
+    os.environ.setdefault("SANDBOX_TIMEOUT_SECONDS", "600")
     return args.func(args)
 
 
