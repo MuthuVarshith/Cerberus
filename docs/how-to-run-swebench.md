@@ -50,7 +50,7 @@ python evaluation/swebench_e2e.py run --instances evaluation/swebench_e2e/valida
 python evaluation/swebench_e2e.py score --experiment-id ID
 ```
 
-Scoring needs `swebench` (tested 5.0.2) in an interpreter given by `SWEBENCH_PYTHON` (default
+Scoring needs `swebench==4.1.0` (5.x expects a dataset with an `image` column and rejects `--namespace`) in an interpreter given by `SWEBENCH_PYTHON` (default
 `artifacts/swebench-venv/Scripts/python.exe`: `python -m venv artifacts/swebench-venv &&
 artifacts/swebench-venv/Scripts/python -m pip install swebench`). It runs
 `swebench.harness.run_evaluation` on `results/swebench/<ID>/predictions.jsonl` with a local dataset
@@ -67,3 +67,28 @@ file, pulls prebuilt x86_64 images from the `swebench` Docker Hub namespace, and
   plugins carry over).
 - Benchmark quality: Verified was human-screened, but some tests still check incidental behaviour.
 - Agent numbers are only meaningful for instances whose gold patch was ADMITTED in `validate`.
+
+## Measured so far (2026-10-12, Windows 11 host, Docker Desktop, cerberus-sandbox:py3.11)
+
+Gold-patch validation (`validate`, no LLM), 5 of 25 subset instances:
+
+| Instance | Outcome | Code | Wall (s) |
+| --- | --- | --- | --- |
+| pallets__flask-5014 | ADMITTED | - | 60.5 |
+| pytest-dev__pytest-10356 | ADMITTED | - | 230.3 |
+| pylint-dev__pylint-8898 | ADMITTED | - | 584.7 |
+| sphinx-doc__sphinx-10466 | ADMITTED | - | 429.0 |
+| psf__requests-5414 | REFUSED | RED_WRONG_REASON | 60.8 |
+
+requests-5414: the FAIL_TO_PASS test fails at base with urllib3's `LocationParseError` raised in
+site-packages, which the RED gate (correctly, by its contract) does not accept. pylint-8898 and
+sphinx-10466 first ended EMPTY_PATCH: the gate's `git diff` hit the default 60 s per-command sandbox
+timeout; the harness now sets `SANDBOX_TIMEOUT_SECONDS=600` (harness/ unchanged) and both re-ran ADMITTED.
+
+Fake-model dry runs through `repair.interface.run_repair` on pallets__flask-5014: `--fake gold`
+ADMITTED (2400 fake tokens, 1 attempt); `--fake give-up` NO_PATCH (3600 fake tokens).
+
+Official scoring: not yet run. Free disk 245 GB, but `swebench` 4.1.0 imports the Unix-only
+`resource` module and cannot run on native Windows; run `score` from WSL or a Linux host
+(`SWEBENCH_PYTHON=/path/to/venv/bin/python`). No SWE-bench images were pulled, so per-image sizes
+are not measured yet.

@@ -226,7 +226,7 @@ def cmd_score(args: argparse.Namespace) -> int:
     run_id = f"cerberus-{args.experiment_id}"
     cmd = [py, "-m", "swebench.harness.run_evaluation", "--dataset_name", ds_path, "--split", "test",
            "--predictions_path", os.path.join(out, "predictions.jsonl"), "--max_workers", str(args.workers),
-           "--run_id", run_id, "--timeout", "1800",
+           "--run_id", run_id, "--namespace", "swebench", "--cache_level", "instance", "--timeout", "1800",
            "--instance_ids", *[r["instance_id"] for r in rows]]
     print(" ".join(cmd))
     proc = subprocess.run(cmd, cwd=out)
