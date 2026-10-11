@@ -28,3 +28,9 @@ Every deviation from the requested plan, with its reason. Newest last.
 7. **File ownership** (to avoid merge conflicts): README.md, dependency manifests/lock files and
    `.github/workflows/` belong to F only; C, D and E put their docs in their own `docs/*.md` files and
    list new dependencies in their reports for F to pin.
+8. **Usage-limit interruption (2026-10-11).** All six agents stopped mid-task when the session usage
+   limit was reached. They were resumed from their own transcripts after the reset rather than
+   restarted. At that point only agent A had produced results (the hybrid + rerank run on the
+   40-instance subset); C–F had only merged the frozen interface and B had not launched any run.
+   Running six large-model agents in parallel consumes the usage allowance quickly; further
+   interruptions are possible and are handled the same way.
