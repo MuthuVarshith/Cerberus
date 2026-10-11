@@ -76,11 +76,12 @@ class ExtractionError(ValueError):
 
 
 def _git(cwd: Optional[str], *args: str, input_text: Optional[str] = None) -> str:
-    res = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8",
-                         errors="replace", input=input_text)
+    # bytes, not text mode: text mode on Windows would turn the patch's LF into CRLF
+    res = subprocess.run(["git", *args], cwd=cwd, capture_output=True,
+                         input=input_text.encode("utf-8") if input_text is not None else None)
     if res.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args[:3])}: {res.stderr.strip()[:500]}")
-    return res.stdout
+        raise RuntimeError(f"git {' '.join(args[:3])}: {res.stderr.decode('utf-8', 'replace').strip()[:500]}")
+    return res.stdout.decode("utf-8", "replace")
 
 
 def diff_files(diff: str) -> List[str]:
