@@ -64,6 +64,13 @@ class Tracer(Protocol):
     def verification(self, attempt: int, status: str, failure_code: Optional[str], duration_seconds: float,
                      metadata: Dict[str, Any]) -> None: ...
     def end_run(self, final_status: str, metadata: Dict[str, Any]) -> None: ...
+    # Optional (Phase 3): one span per graph node; callers fall back to no span when absent.
+    def node(self, name: str, metadata: Dict[str, Any]) -> Span: ...
+
+
+class _NoopSpan:
+    def end(self, **fields: Any) -> None:
+        pass
 
 
 class NoopTracer:
@@ -75,6 +82,7 @@ class NoopTracer:
     def retrieval(self, query, top_files, latency_seconds, metadata): pass
     def verification(self, attempt, status, failure_code, duration_seconds, metadata): pass
     def end_run(self, final_status, metadata): pass
+    def node(self, name, metadata): return _NoopSpan()
 
 
 class RecordingTracer:
@@ -108,6 +116,15 @@ class RecordingTracer:
     def end_run(self, final_status, metadata):
         self._add("run_end", final_status=final_status, metadata=metadata)
 
+    def node(self, name, metadata):
+        self._add("node_start", name=name, metadata=metadata)
+        tracer = self
+
+        class _Span:
+            def end(self, **fields):
+                tracer._add("node_end", name=name, **fields)
+        return _Span()
+
 
 class LangfuseTracer:
     """Langfuse v3 SDK. `client` is injectable for tests."""
@@ -118,6 +135,7 @@ class LangfuseTracer:
             client = Langfuse()  # reads LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_HOST
         self.client = client
         self.root: Any = None
+        self._parent: Any = None   # open node span (graph runs); children nest under it
         self.trace_id: Optional[str] = None
 
     def start_run(self, run_id: str, metadata: Dict[str, Any]) -> None:
@@ -134,7 +152,7 @@ class LangfuseTracer:
     def _child(self, name: str, as_type: str, **kwargs: Any) -> None:
         if self.root is None:
             return
-        obs = self.root.start_observation(name=name, as_type=as_type, **kwargs)
+        obs = (self._parent or self.root).start_observation(name=name, as_type=as_type, **kwargs)
         obs.end()
 
     def generation(self, name, model, input_tokens, output_tokens, cost, latency_seconds, metadata, error=None):
@@ -161,6 +179,20 @@ class LangfuseTracer:
         self._child("cerberus-verification", "chain",
                     output={"status": status, "failure_code": failure_code},
                     metadata=redact({**metadata, "attempt": attempt, "duration_seconds": duration_seconds}))
+
+    def node(self, name: str, metadata: Dict[str, Any]) -> Span:
+        if self.root is None:
+            return _NoopSpan()
+        obs = self.root.start_observation(name=f"node:{name}", as_type="span", metadata=redact(metadata))
+        self._parent = obs
+        tracer = self
+
+        class _Span:
+            def end(self, **fields: Any) -> None:
+                tracer._parent = None
+                obs.update(output=redact(fields))
+                obs.end()
+        return _Span()
 
     def end_run(self, final_status: str, metadata: Dict[str, Any]) -> None:
         if self.root is None:
