@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from github.pr_publisher import redact_secrets
 
 API_URL = "https://api.github.com"
-MAX_CHECK_TEXT = 65535
+MAX_CHECK_TEXT = 65535  # also GitHub's limit for issue comment and PR bodies
 
 Transport = Callable[[str, str, Dict[str, str], Optional[Dict[str, Any]]], Tuple[int, Any]]
 
@@ -91,5 +91,21 @@ class GitHubClient:
             body["output"]["text"] = _clip(text)
         self._call("PATCH", f"/repos/{owner}/{repo}/check-runs/{int(check_run_id)}", body)
 
-    def create_issue_comment(self, owner: str, repo: str, number: int, body: str) -> None:
-        self._call("POST", f"/repos/{owner}/{repo}/issues/{int(number)}/comments", {"body": _clip(body)})
+    def create_issue_comment(self, owner: str, repo: str, number: int, body: str) -> Optional[int]:
+        """Post a comment; returns its id so it can be updated in place later."""
+        data = self._call("POST", f"/repos/{owner}/{repo}/issues/{int(number)}/comments", {"body": _clip(body)})
+        return int(data["id"]) if isinstance(data, dict) and data.get("id") else None
+
+    def update_issue_comment(self, owner: str, repo: str, comment_id: int, body: str) -> None:
+        self._call("PATCH", f"/repos/{owner}/{repo}/issues/comments/{int(comment_id)}", {"body": _clip(body)})
+
+    def get_branch(self, owner: str, repo: str, branch: str) -> Dict[str, Any]:
+        from urllib.parse import quote
+
+        return self._call("GET", f"/repos/{owner}/{repo}/branches/{quote(branch, safe='')}")
+
+    def create_pull(self, owner: str, repo: str, title: str, head: str, base: str, body: str, draft: bool = True) -> Dict[str, Any]:
+        """Open a pull request. Cerberus never merges and never enables auto-merge."""
+        return self._call("POST", f"/repos/{owner}/{repo}/pulls", {
+            "title": title[:250], "head": head, "base": base, "body": _clip(body), "draft": draft,
+        })
