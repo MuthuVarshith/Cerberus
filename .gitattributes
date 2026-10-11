@@ -1,2 +1,5 @@
 autonomous-pr-fixer/evaluation/localization/*.jsonl text eol=lf
 autonomous-pr-fixer/evaluation/localization/*.json text eol=lf
+*.sh text eol=lf
+*.tftpl text eol=lf
+*.tf text eol=lf
