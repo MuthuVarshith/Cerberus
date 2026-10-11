@@ -6,7 +6,7 @@ import os
 import subprocess
 import uuid
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 from harness.docker_sandbox import SandboxError
 from repair.agent import Printer, RepairAgent
@@ -39,9 +39,21 @@ def _head(repo_dir: str, ref: Optional[str]) -> str:
     return res.stdout.strip() if res.returncode == 0 else ""
 
 
+def task_dict(task: RepairTask) -> dict:
+    return {"repo_dir": task.repo_dir, "issue_id": task.issue_id, "title": task.title, "body": task.body,
+            "reproduction_test": task.reproduction_test, "base_ref": task.base_ref, "issue_number": task.issue_number}
+
+
+def checkpoint_path(config: RepairConfig, out_root: str = DEFAULT_OUT) -> str:
+    return config.checkpoint_db or os.path.join(out_root, "langgraph-checkpoints.sqlite")
+
+
 def run_repair(task: RepairTask, config: RepairConfig, model: Optional[ChatModel] = None,
                tracer: Optional[Tracer] = None, run_id: Optional[str] = None, out_root: str = DEFAULT_OUT,
-               printer: Optional[Printer] = None) -> RepairState:
+               printer: Optional[Printer] = None, resume: bool = False, review_decision: Optional[dict] = None,
+               reviewer: Optional[Callable[[dict], Optional[dict]]] = None) -> RepairState:
+    """config.orchestrator selects the Phase 1 loop (default) or the LangGraph graph. `resume`,
+    `review_decision` and `reviewer` apply to langgraph only (resume by run id from its checkpoint)."""
     run_id = run_id or f"repair_{uuid.uuid4().hex[:10]}"
     out_dir = os.path.join(out_root, run_id)
     state = RepairState(run_id=run_id, repository=os.path.abspath(task.repo_dir), commit_sha=_head(task.repo_dir, task.base_ref),
@@ -58,8 +70,9 @@ def run_repair(task: RepairTask, config: RepairConfig, model: Optional[ChatModel
         state.final_status = FinalStatus.SETUP_FAILURE
         state.final_message = str(exc)[:500]
         os.makedirs(out_dir, exist_ok=True)
-        with open(os.path.join(out_dir, "agent_run.json"), "w", encoding="utf-8") as f:
-            f.write(state.model_dump_json(indent=2))
+        if not (resume and os.path.exists(os.path.join(out_dir, "agent_run.json"))):
+            with open(os.path.join(out_dir, "agent_run.json"), "w", encoding="utf-8") as f:
+                f.write(state.model_dump_json(indent=2))
         return state
     gate = CerberusGate(repo_dir=task.repo_dir, issue_number=task.issue_number, issue_title=task.title,
                         issue_body=task.body, reproduction_test=task.reproduction_test, base_ref=task.base_ref,
@@ -75,6 +88,10 @@ def run_repair(task: RepairTask, config: RepairConfig, model: Optional[ChatModel
     try:
         agent = RepairAgent(model, gate, sandbox, config, tracer=tracer or create_tracer(),
                             printer=printer, out_dir=out_dir)
+        if config.orchestrator == "langgraph":
+            from repair.orchestration.graph import run_graph
+            return run_graph(agent, state, task_dict(task), checkpoint_path(config, out_root), resume=resume,
+                             decision=review_decision, reviewer=reviewer)
         return agent.run(state, task.reproduction_test)
     finally:
         repair_logger.removeHandler(handler)
