@@ -29,7 +29,25 @@ def _config(args: argparse.Namespace) -> RepairConfig:
         max_attempts=getattr(args, "max_attempts", None),
         retrieval=None if getattr(args, "retrieval", None) in (None, "none") else args.retrieval,
         isolation=ISOLATION_HOST_UNSAFE if getattr(args, "unsafe_local_sandbox", False) else None,
+        orchestrator=getattr(args, "orchestrator", None),
+        review=True if getattr(args, "review", False) else None,
     )
+
+
+def _interactive_reviewer(payload: dict):
+    """approve / request changes / reject an admitted patch at the terminal; None leaves it pending."""
+    if not sys.stdin.isatty():
+        return None
+    print("\n=== Human review: Cerberus ADMITTED this patch ===")
+    print(payload.get("patch", ""))
+    choice = input("[a]pprove / [r]equest changes / re[j]ect / [l]ater: ").strip().lower()[:1]
+    if choice == "a":
+        return {"decision": "approve"}
+    if choice == "r":
+        return {"decision": "request_changes", "comment": input("Requested changes: ")}
+    if choice == "j":
+        return {"decision": "reject"}
+    return None
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
@@ -41,12 +59,33 @@ def _cmd_run(args: argparse.Namespace) -> int:
                       body=args.body or args.issue, reproduction_test=repro, base_ref=args.base,
                       issue_number=args.issue_number)
     try:
-        state = run_repair(task, _config(args), run_id=args.run_id, printer=print)
+        state = run_repair(task, _config(args), run_id=args.run_id, printer=print, reviewer=_interactive_reviewer)
     except LLMError as exc:
         print(f"LLM_FAILURE: {exc}", file=sys.stderr)
         return 2
     if state.final_status and state.final_status.value == "SETUP_FAILURE":
         print(f"SETUP_FAILURE: {state.final_message}", file=sys.stderr)
+    return 0 if state.final_status and state.final_status.value == "ADMITTED" else 1
+
+
+def _cmd_resume(args: argparse.Namespace) -> int:
+    from repair.orchestration.graph import checkpointed_task
+    from repair.runner import RepairTask, checkpoint_path, run_repair
+
+    args.orchestrator = "langgraph"
+    config = _config(args)
+    saved = checkpointed_task(args.run_id, checkpoint_path(config))
+    if not saved:
+        print(f"No checkpoint for run {args.run_id} in {checkpoint_path(config)}", file=sys.stderr)
+        return 2
+    task = RepairTask(**saved)
+    decision = {"decision": args.decision, "comment": args.comment or ""} if args.decision else None
+    try:
+        state = run_repair(task, config, run_id=args.run_id, printer=print, resume=True,
+                           review_decision=decision, reviewer=_interactive_reviewer)
+    except LLMError as exc:
+        print(f"LLM_FAILURE: {exc}", file=sys.stderr)
+        return 2
     return 0 if state.final_status and state.final_status.value == "ADMITTED" else 1
 
 
@@ -110,6 +149,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Offer the retrieve_code tool with this retriever (default: RETRIEVAL or none)")
         sp.add_argument("--unsafe-local-sandbox", action="store_true",
                         help="Run repository code on the host (trusted fixtures only)")
+        sp.add_argument("--orchestrator", choices=["loop", "langgraph"],
+                        help="loop (Phase 1, default) or langgraph (Phase 3 graph); default: ORCHESTRATOR or loop")
 
     r = sub.add_parser("run", help="Repair one issue")
     r.add_argument("--repo", required=True)
@@ -119,6 +160,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--repro-test", required=True, help="Reproduction test file Cerberus holds the patch to")
     r.add_argument("--base", help="Base commit (default: HEAD)")
     r.add_argument("--run-id")
+    r.add_argument("--review", action="store_true", help="langgraph: pause admitted patches for human approval")
     common(r)
     r.set_defaults(func=_cmd_run)
 
@@ -129,6 +171,14 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--experiment-id")
     common(e)
     e.set_defaults(func=_cmd_evaluate)
+
+    rs = sub.add_parser("resume", help="Resume a langgraph run (failed, interrupted or awaiting review) by run id")
+    rs.add_argument("run_id")
+    rs.add_argument("--decision", choices=["approve", "request_changes", "reject"], help="Answer a pending human review")
+    rs.add_argument("--comment", help="Reviewer comment (request_changes)")
+    rs.add_argument("--review", action="store_true", help="Keep human review on for later admissions")
+    common(rs)
+    rs.set_defaults(func=_cmd_resume)
 
     d = sub.add_parser("demo", help="Scripted negative-path demo against the real gate")
     d.add_argument("--run-id")
