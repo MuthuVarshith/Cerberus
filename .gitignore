@@ -47,3 +47,10 @@ Thumbs.db
 
 # Repair-agent experiment run directories (summaries and reports are kept)
 autonomous-pr-fixer/results/*/runs/
+
+# Terraform local state and plugins (may contain resource details; never commit)
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+.terraform.lock.hcl.bak

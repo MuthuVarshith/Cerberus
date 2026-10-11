@@ -1,0 +1,59 @@
+name: AWS deployment
+
+on:
+  push:
+    paths: ["deploy/aws/**", ".github/workflows/deploy-aws.yml"]
+  pull_request:
+    paths: ["deploy/aws/**", ".github/workflows/deploy-aws.yml"]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "plan or apply (apply creates billable AWS resources)"
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Terraform fmt + validate (no AWS credentials)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/aws/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+      - name: Shell scripts parse
+        working-directory: deploy/aws/scripts
+        run: bash -n put-secrets.sh && bash -n update.sh
+
+  deploy:
+    name: Terraform ${{ inputs.action }} (manual only)
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: aws # add required reviewers on this environment so applies need approval
+    permissions:
+      contents: read
+      id-token: write # OIDC: short-lived AWS credentials, no stored access keys
+    defaults:
+      run:
+        working-directory: deploy/aws/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - run: terraform init
+      - run: terraform plan -out=tfplan
+      - if: inputs.action == 'apply'
+        run: terraform apply -auto-approve tfplan

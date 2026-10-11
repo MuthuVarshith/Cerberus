@@ -535,6 +535,28 @@ appends its test to an existing test file is refused by the App with guidance; t
 The service exposes only `GET /health` and `POST /webhook`, processes one run per repository at a time, caps runs per
 hour, and applies a wall-clock timeout to every run.
 
+## Deployment (AWS)
+
+Infrastructure-as-code for running the GitHub App on AWS is in [`deploy/aws/`](deploy/aws/) — **written and
+validated in CI, not applied** (no AWS resources exist for this project yet).
+
+- **Terraform:** one EC2 instance (Amazon Linux 2023) running the FastAPI App under systemd plus Docker for the
+  verification sandbox, an Elastic IP, a security group that accepts webhooks only from GitHub's published IP
+  ranges, an IAM role limited to reading `/cerberus/*` secrets, IMDSv2 only, encrypted storage, no SSH
+  (AWS Session Manager instead), optional HTTPS through Caddy when a domain is set.
+- **Secrets:** AWS SSM Parameter Store (SecureString), loaded at boot; never in Terraform state or the repo.
+- **CI/CD:** `.github/workflows/deploy-aws.yml` runs `terraform fmt`/`validate` on every change and a manual,
+  approval-gated `plan`/`apply` using GitHub OIDC (no stored AWS keys).
+
+```bash
+cd deploy/aws/scripts && ./put-secrets.sh your-app.private-key.pem   # secrets -> SSM
+cd ../terraform && terraform init && terraform apply                 # creates billable resources
+terraform output webhook_url                                         # set in the GitHub App
+terraform destroy                                                    # remove everything
+```
+
+Details, architecture diagram, security notes and the scaling path: [`docs/deploy-aws.md`](docs/deploy-aws.md).
+
 ## Project Structure
 
 ```text
@@ -553,6 +575,7 @@ autonomous-pr-fixer/
 docs/assets/        screenshots and recordings used in this README
 tools/github-app/   smee.io relay and Windows launcher for running the App locally
 site/               one-page visual summary
+deploy/aws/         Terraform + scripts for an AWS EC2 deployment (not applied)
 ```
 
 Built with Python, pytest, JUnit XML, Docker, Git, FastAPI, SQLite and the GitHub REST API.
@@ -575,6 +598,7 @@ Built with Python, pytest, JUnit XML, Docker, Git, FastAPI, SQLite and the GitHu
 | [`docs/security.md`](docs/security.md) | Threat model, sandbox, tool policy, secrets, GitHub App controls |
 | [`docs/how-to-run-live.md`](docs/how-to-run-live.md), [`docs/how-to-run-swebench.md`](docs/how-to-run-swebench.md) | Live runs and SWE-bench end to end |
 | [`docs/phase-4-github.md`](docs/phase-4-github.md) | Issue-triggered repair and human approval |
+| [`docs/deploy-aws.md`](docs/deploy-aws.md) | AWS deployment (Terraform, SSM secrets, OIDC CI/CD) — not applied |
 | [`docs/plan-changes.md`](docs/plan-changes.md) | Deviations from the 2.0 plan |
 
 ## Limitations
@@ -590,6 +614,8 @@ Built with Python, pytest, JUnit XML, Docker, Git, FastAPI, SQLite and the GitHu
   repositories. The App requires a pull request to add exactly one new test file.
 - The built-in repair agent has been measured with real models only on 12 small tasks (10 valid results);
   that is not a fix rate. The external coding-agent integration has not been run with a live agent.
+- The AWS deployment is infrastructure-as-code only: it is validated in CI but has never been applied, so cloud
+  behaviour and cost are not measured.
 - A deliberately malicious repository could forge its own test results, because repository code runs in the same process
   as its test runner. Cerberus verifies patches to trusted-but-buggy repositories.
 

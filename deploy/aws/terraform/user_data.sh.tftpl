@@ -1,0 +1,98 @@
+#!/bin/bash
+# Cerberus GitHub App bootstrap for Amazon Linux 2023 (rendered by Terraform; runs once at first boot).
+set -euo pipefail
+exec > >(tee /var/log/cerberus-bootstrap.log) 2>&1
+
+REGION="${region}"
+SSM_PREFIX="${ssm_prefix}"
+APP_HOME=/opt/cerberus
+CODE="$APP_HOME/src"
+DATA="$APP_HOME/data"
+
+# --- packages: Docker for the sandbox, Python for the App, git for clones
+dnf -y update
+dnf -y install docker git python3.11 python3.11-pip jq
+systemctl enable --now docker
+
+# --- service user (docker group lets it start sandbox containers; the App itself is not containerised)
+id cerberus >/dev/null 2>&1 || useradd --system --create-home --home-dir "$APP_HOME" --shell /sbin/nologin cerberus
+usermod -aG docker cerberus
+install -d -o cerberus -g cerberus -m 0750 "$APP_HOME" "$DATA"
+
+# --- code
+if [ ! -d "$CODE/.git" ]; then
+  sudo -u cerberus git clone --branch "${git_ref}" --depth 1 "${repo_url}" "$CODE"
+fi
+sudo -u cerberus python3.11 -m venv "$APP_HOME/venv"
+sudo -u cerberus "$APP_HOME/venv/bin/pip" install --upgrade pip
+sudo -u cerberus "$APP_HOME/venv/bin/pip" install -r "$CODE/autonomous-pr-fixer/requirements.txt"
+
+# --- sandbox image used by the verification gate
+docker build -t cerberus-sandbox:py3.11 "$CODE/autonomous-pr-fixer/sandbox"
+
+# --- secrets from SSM Parameter Store (never written to Terraform state or user data)
+install -d -o root -g cerberus -m 0750 /etc/cerberus
+get_param() {
+  aws ssm get-parameter --region "$REGION" --with-decryption --name "$SSM_PREFIX/$1" \
+    --query Parameter.Value --output text 2>/dev/null || true
+}
+get_param github_app_private_key > /etc/cerberus/github-app.pem
+chown root:cerberus /etc/cerberus/github-app.pem
+chmod 0640 /etc/cerberus/github-app.pem
+
+{
+  echo "GITHUB_APP_ID=$(get_param github_app_id)"
+  echo "GITHUB_WEBHOOK_SECRET=$(get_param github_webhook_secret)"
+  echo "GITHUB_APP_PRIVATE_KEY_PATH=/etc/cerberus/github-app.pem"
+  echo "CERBERUS_DATA_DIR=$DATA"
+  # Optional model keys (only those you created in SSM are filled in).
+  for name in OPENROUTER_API_KEY GEMINI_API_KEY ANTHROPIC_API_KEY LLM_API_KEY LANGFUSE_PUBLIC_KEY LANGFUSE_SECRET_KEY; do
+    value="$(get_param "$(echo "$name" | tr '[:upper:]' '[:lower:]')")"
+    [ -n "$value" ] && [ "$value" != "None" ] && echo "$name=$value"
+  done
+%{ for key, value in app_env ~}
+  echo "${key}=${value}"
+%{ endfor ~}
+} > /etc/cerberus/cerberus.env
+chown root:cerberus /etc/cerberus/cerberus.env
+chmod 0640 /etc/cerberus/cerberus.env
+
+# --- systemd service for the FastAPI GitHub App
+LISTEN_HOST=0.0.0.0
+[ -n "${domain_name}" ] && LISTEN_HOST=127.0.0.1
+cat > /etc/systemd/system/cerberus-app.service <<UNIT
+[Unit]
+Description=Cerberus GitHub App (FastAPI)
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+User=cerberus
+Group=cerberus
+WorkingDirectory=$CODE/autonomous-pr-fixer
+EnvironmentFile=/etc/cerberus/cerberus.env
+ExecStart=$APP_HOME/venv/bin/uvicorn github.webhook_handler:app --host $LISTEN_HOST --port 8000 --workers 1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now cerberus-app
+
+# --- optional HTTPS with Caddy (automatic Let's Encrypt certificate) when a domain is configured
+if [ -n "${domain_name}" ]; then
+  dnf -y install 'dnf-command(copr)' && dnf -y copr enable @caddy/caddy && dnf -y install caddy
+  cat > /etc/caddy/Caddyfile <<CADDY
+${domain_name} {
+  reverse_proxy 127.0.0.1:8000
+}
+CADDY
+  systemctl enable --now caddy
+fi
+
+echo "Cerberus bootstrap finished"
