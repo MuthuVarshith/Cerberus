@@ -104,40 +104,75 @@ be read is a refusal, never a pass.
   <img src="docs/assets/02-pipeline-and-run.png" alt="The pipeline stages alongside the terminal output of a real admitted run" width="860">
 </p>
 
-### Cerberus 2.0: repair agent and code retrieval
+### Cerberus 2.0: repair agent, retrieval, GitHub workflow
 
 ```mermaid
 flowchart LR
-    issue["Issue + reproduction test"] --> agent
+    subgraph gh["GitHub App (github/, FastAPI)"]
+        issue["Issue: /cerberus fix"] --> hook["Webhook<br/>HMAC verified · write access checked"]
+        approve["/cerberus approve<br/>(human)"]
+    end
+
+    hook --> orch
 
     subgraph agentbox["Repair agent (repair/)"]
-        agent["One tool-calling model<br/>Anthropic · Gemini · OpenRouter"]
+        orch["Orchestrator<br/>loop (default) · LangGraph + checkpointer"]
+        agent["Tool-calling model<br/>Anthropic · Gemini · OpenRouter · OpenAI-compatible"]
         tools["Sandboxed tools<br/>search · read · symbols · tests<br/>git diff · edit · apply patch"]
-        retrieve["retrieve_code (optional)<br/>BM25 / hybrid over Tree-sitter chunks<br/>index cached per commit"]
+        retrieve["retrieve_code (opt-in)<br/>Tree-sitter chunks · BM25 · fastembed + Qdrant<br/>RRF hybrid · cross-encoder rerank"]
+        orch --> agent
         agent <--> tools
         agent <--> retrieve
     end
 
-    agent -- "workspace diff<br/>(submit_patch)" --> gate
+    agent -- "workspace diff" --> gate
 
     subgraph gatebox["Cerberus gate (unchanged)"]
         gate["RED ×3 → BASELINE → GREEN ×3<br/>→ REGRESSION → SCOPE → ADMISSION"]
     end
 
     gate -- "REFUSED + structured feedback<br/>(bounded retries)" --> agent
-    gate -- ADMITTED --> pr["run.json evidence<br/>→ Check Run / draft PR"]
+    gate -- "ADMITTED + run.json" --> approve
+    approve --> pr["Draft PR<br/>(never merged by Cerberus)"]
 
     tools -. "repository code runs only here" .-> sandbox[("Docker sandbox<br/>offline · no capabilities<br/>CPU / memory / PID limits")]
     gate -.-> sandbox
-    agent -. "traces" .-> langfuse[("Langfuse")]
+    agent -. "redacted traces" .-> langfuse[("Langfuse")]
 ```
 
 The agent proposes; the unchanged gate decides. Every submission is an ordinary gate run, and the agent
-cannot edit tests, verification files or its own verdict. Retrieval is measured separately on a
-120-instance SWE-bench Verified localization benchmark (BM25 over code chunks: Recall@10 0.864 vs 0.487
-for the Phase 1 localizer, paired p < 0.001). Details: [`docs/cerberus-agent.md`](docs/cerberus-agent.md),
-[`docs/phase1-results.md`](docs/phase1-results.md),
-[`autonomous-pr-fixer/evaluation/phase2_report.md`](autonomous-pr-fixer/evaluation/phase2_report.md).
+cannot edit tests, verification files or its own verdict. The issue → run → approval → PR flow and the
+LangGraph orchestrator are being built now (see [`docs/phase-4-github.md`](docs/phase-4-github.md)); the
+PR-verification App (`/cerberus verify`) is live today.
+
+**Features**
+
+- Verification gate with six gates, a Docker sandbox and an auditable `run.json` per run.
+- Repair agent behind a frozen interface, `repair.interface.run_repair(task, config) -> RepairResult`;
+  budgets for attempts, tool calls, tokens, cost and time.
+- Providers: Anthropic, Gemini (Google AI Studio, free tier), OpenRouter (`:free` models), any
+  OpenAI-compatible HTTPS endpoint.
+- Code retrieval (Phase 2): Tree-sitter chunking, in-house BM25, fastembed + Qdrant vectors, RRF hybrid,
+  cross-encoder rerank, exposed as the `retrieve_code` tool (off by default).
+- Langfuse tracing with secret redaction; no prompts or file contents are sent.
+- GitHub App: Check Runs on PRs; issue-triggered repair with human approval (in progress).
+- Evaluation: 12-task agent evaluation, a 120-instance SWE-bench Verified localization benchmark with
+  paired significance tests, and a SWE-bench Verified end-to-end harness (in progress).
+
+### Cerberus 2.0 results
+
+| Measurement | Result | Source |
+| --- | --- | --- |
+| Phase 1: real-model repairs (12 tasks; 10 with a valid result) | **10 of 10 admitted**, all passing hidden tests (0 false admissions); models `gemini-3.8-flash`, `poolside/laguna-s-2.1:free`; cost $0 | [`docs/phase1-results.md`](docs/phase1-results.md) |
+| Phase 2: localization Recall@10, 120 SWE-bench Verified instances | **0.487** (Phase 1 localizer) → **0.864** (BM25, sum of top-3 chunks) | [`phase2_report.md`](autonomous-pr-fixer/evaluation/phase2_report.md) |
+| Paired test, BM25 sum-of-top-3 vs Phase 1 (hit@10, exact McNemar) | 6 / 50 discordant, **p ≈ 1e-9** | `significance.py` on the committed result files (command below) |
+| 40-instance subset, Recall@10 (bge-small) | vector 0.912 · hybrid 0.963 | [`results/sub40-*.md`](autonomous-pr-fixer/evaluation/localization/results/) |
+| Retrieval's effect on end-to-end repair | not yet measured | |
+| LangGraph vs loop orchestrator | not yet measured | |
+| SWE-bench Verified resolved rate | not yet measured | |
+
+Sum-of-top-3 aggregation was chosen after seeing the 120 results (post hoc) and then frozen for every
+other retriever; the subset numbers are not directly comparable with the 120-instance ones.
 
 ## Verification Gates
 
@@ -299,10 +334,32 @@ Requirements: Python 3.11+, Git and Docker.
 
 ```bash
 cd autonomous-pr-fixer
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.lock      # exact versions; or: pip install -e ".[retrieval,langgraph,dev]"
 docker build -t cerberus-sandbox:py3.11 sandbox/
+cp .env.example .env                            # agent keys; free tiers: Gemini (AI Studio), OpenRouter :free
 python main.py --demo
 ```
+
+Dependencies are declared in [`pyproject.toml`](autonomous-pr-fixer/pyproject.toml) (extras `retrieval`,
+`langgraph`, `swebench`, `dev`); `requirements.lock` pins the full closure and is produced by
+[`tools/lock_from_env.py`](tools/lock_from_env.py) (pip-compile/uv were not available offline). CI
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs ruff, mypy, an import smoke test and pytest on
+Python 3.11 and 3.12; Docker tests skip there.
+
+**Cerberus 2.0 commands** (from `autonomous-pr-fixer/`):
+
+```bash
+python main.py agent run --repo ../target --issue "..." --repro-test test_reproduce.py [--retrieval bm25]
+python main.py agent evaluate --limit 12 --experiment-id my-run
+python main.py agent demo
+python evaluation/localization/run.py --help                     # localization benchmark
+python evaluation/localization/significance.py \
+    evaluation/localization/results/phase1-baseline.json evaluation/localization/results/bm25-sum3.json
+```
+
+Live runs: [`docs/how-to-run-live.md`](docs/how-to-run-live.md). SWE-bench end to end:
+[`docs/how-to-run-swebench.md`](docs/how-to-run-swebench.md). Issue → approval → PR with the App:
+[`docs/phase-4-github.md`](docs/phase-4-github.md). Security: [`docs/security.md`](docs/security.md).
 
 Run the test suite, and the real-repository check from the demo:
 
@@ -369,7 +426,7 @@ python main.py agent demo     # scripted negative path: bad patch refused (REGRE
 One tool-using model inspects the repository through sandboxed tools (search, read, symbols, tests, git diff, edit)
 and submits its workspace diff; every submission is judged by the unchanged gate, and any refusal — GREEN, REGRESSION,
 SCOPE — goes back to the model as structured feedback for a bounded number of retries. The agent cannot edit tests or
-admit its own patch. Real-model repair results are not measured yet. See [`docs/cerberus-agent.md`](docs/cerberus-agent.md)
+admit its own patch. Phase 1 real-model results: 10 of 10 valid tasks admitted. See [`docs/cerberus-agent.md`](docs/cerberus-agent.md)
 and [`docs/phase1-results.md`](docs/phase1-results.md).
 
 ## Configuration
@@ -514,6 +571,11 @@ Built with Python, pytest, JUnit XML, Docker, Git, FastAPI, SQLite and the GitHu
 | [`CERBERUS_PROGRESS.md`](CERBERUS_PROGRESS.md) | Engineering history and test log |
 | [`docs/cerberus-agent.md`](docs/cerberus-agent.md) | Repair agent (Phase 1): tools, security boundaries, metrics, evaluation |
 | [`docs/phase1-results.md`](docs/phase1-results.md) | Phase 1 status and results |
+| [`docs/phase-2-notes.md`](docs/phase-2-notes.md), [Phase 2 report](autonomous-pr-fixer/evaluation/phase2_report.md) | Code retrieval and the localization benchmark |
+| [`docs/security.md`](docs/security.md) | Threat model, sandbox, tool policy, secrets, GitHub App controls |
+| [`docs/how-to-run-live.md`](docs/how-to-run-live.md), [`docs/how-to-run-swebench.md`](docs/how-to-run-swebench.md) | Live runs and SWE-bench end to end |
+| [`docs/phase-4-github.md`](docs/phase-4-github.md) | Issue-triggered repair and human approval |
+| [`docs/plan-changes.md`](docs/plan-changes.md) | Deviations from the 2.0 plan |
 
 ## Limitations
 
@@ -526,8 +588,8 @@ Built with Python, pytest, JUnit XML, Docker, Git, FastAPI, SQLite and the GitHu
   Linux or macOS host running the full sandbox has not been validated.
 - GitHub App validation covers the documented live setup: a locally running service behind a smee.io relay, on two
   repositories. The App requires a pull request to add exactly one new test file.
-- An external coding-agent integration and a built-in repair agent are implemented and tested with scripted models
-  against the real gate; their repair quality with a live model has not been measured yet.
+- The built-in repair agent has been measured with real models only on 12 small tasks (10 valid results);
+  that is not a fix rate. The external coding-agent integration has not been run with a live agent.
 - A deliberately malicious repository could forge its own test results, because repository code runs in the same process
   as its test runner. Cerberus verifies patches to trusted-but-buggy repositories.
 

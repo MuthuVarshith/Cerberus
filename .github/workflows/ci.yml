@@ -2,12 +2,15 @@ name: CI
 
 # GitHub Actions discovers workflows only at the repository root. The project
 # itself lives in autonomous-pr-fixer/, so each run step uses that directory.
+# No secrets are used. Docker-dependent tests skip themselves when the engine
+# or the sandbox image is unavailable.
 
 on:
   push:
-    branches: [main, master]
   pull_request:
-    branches: [main, master]
+
+permissions:
+  contents: read
 
 defaults:
   run:
@@ -15,47 +18,49 @@ defaults:
 
 jobs:
   test:
-    name: Tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Lint, types, tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-
+        python: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
           cache: pip
-          cache-dependency-path: autonomous-pr-fixer/requirements.txt
+          cache-dependency-path: autonomous-pr-fixer/requirements.lock
 
-      - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+      - name: Install pinned dependencies
+        run: python -m pip install -r requirements.lock
 
-      - name: Run tests
-        run: python -m pytest tests/ -v --tb=short
-        # No secrets required: GitHub integration is exercised via dry-run paths.
+      - name: Ruff (Phase 2 scope)
+        run: python -m ruff check repair/retrieval evaluation/localization tests/test_retrieval_phase2.py tests/test_retrieve_tool.py
+
+      - name: Mypy (Phase 2 scope)
+        run: python -m mypy repair/retrieval evaluation/localization
+
+      - name: Import smoke check
+        run: python -c "import github.app_service, repair.interface, main"
+
+      - name: Tests
+        run: python -m pytest -q --tb=short
 
   secret-audit:
     name: Hard-coded secret audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-
       - name: Scan for common secret patterns
         shell: bash
+        working-directory: .
         run: |
-          echo "Scanning for common secret patterns..."
-          if grep -RInE \
-            --exclude-dir=.git \
-            --exclude-dir=tests \
-            --include='*.py' \
+          if grep -RInE --exclude-dir=.git --exclude-dir=tests --include='*.py' \
             '(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{20,})' \
             autonomous-pr-fixer; then
             echo "ERROR: Possible hard-coded secrets found!"
             exit 1
           fi
-          echo "No production token-shaped secrets detected."
+          echo "No token-shaped secrets detected."
