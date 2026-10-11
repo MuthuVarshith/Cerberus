@@ -59,7 +59,20 @@ that measurably do.
 
 BM25 vs Phase 1: Recall@10 +0.289 [95% CI +0.175, +0.404], McNemar p = 7.7e-06 (n = 120).
 
-Dense, hybrid and rerank: **pending** (40-instance subset).
+| Method (same 40 instances) | R@1 | R@5 | R@10 | MRR |
+| --- | --- | --- | --- | --- |
+| Phase 1 localizer | 0.113 | 0.312 | 0.438 | 0.236 |
+| BM25, sum of top 3 | 0.362 | 0.700 | 0.900 | 0.527 |
+| Vector, bge-small | 0.525 | 0.787 | 0.912 | 0.663 |
+| Hybrid (BM25 + bge-small, RRF) | 0.512 | 0.850 | 0.963 | 0.679 |
+| Hybrid + reranker | 0.500 | 0.800 | 0.863 | 0.657 |
+
+Hybrid vs BM25 (n = 40): Recall@1 +0.150 [+0.050, +0.263], McNemar 0 / 7, p = 0.016; MRR +0.152
+[+0.066, +0.248]; Recall@10 +0.062 [−0.013, +0.150], p = 0.25 (not significant). Uncorrected; does
+not survive Bonferroni over the 15 subset tests. Reranker: dropped (Recall@5 −0.050, +14 s median
+per query). Hybrid kept; jina-code warm-up running. Recommended agent retriever: `bm25` (a cold
+bge-small index of one Django commit took 51 min on the laptop, over the 30-min run budget);
+`hybrid-bge-small` where embeddings are pre-cached. Details: `phase2_report.md`.
 End-to-end effect on the agent: **pending** (Step 4).
 
 ## Interview questions
@@ -78,6 +91,9 @@ End-to-end effect on the agent: **pending** (Step 4).
    hoc and frozen before scoring the other retrievers.
 
 3. **Why might vector search not help on code, and how would you decide whether to keep it?**
-   **Pending the measurement.** The decision rule is fixed in advance: keep dense or hybrid retrieval only
-   if it beats BM25 on the same 40 instances under the same aggregation, with a paired test, and is
-   worth its indexing cost; otherwise BM25 stays alone.
+   Code queries often hinge on exact identifiers, which BM25 matches directly, and BM25 with
+   sum-of-top-3 already reached Recall@10 0.900 on the 40 instances. Measured: hybrid helped at the
+   top (Recall@1 +0.150, p = 0.016; MRR +0.152 [+0.066, +0.248]) but not at Recall@10 (p = 0.25), and
+   only on uncorrected tests with n = 40. The rule was fixed in advance (paired test against BM25,
+   same aggregation, worth the indexing cost), so hybrid is kept as a ranker, but on a CPU laptop the
+   cold embedding cost (51 min for one Django commit) makes BM25 the practical agent default.
