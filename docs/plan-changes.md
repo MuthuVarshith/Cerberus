@@ -34,3 +34,13 @@ Every deviation from the requested plan, with its reason. Newest last.
    40-instance subset); C–F had only merged the frozen interface and B had not launched any run.
    Running six large-model agents in parallel consumes the usage allowance quickly; further
    interruptions are possible and are handled the same way.
+9. **Agent C did not refactor `repair/agent.py`** (the edit was rejected); the LangGraph graph carries its
+   own copy of the model-call accounting. Follow-up: extract a shared helper.
+10. **`RepairResult` has no review/PR fields.** Left frozen at v1.0; adding them needs a version bump.
+11. **Official SWE-bench scoring blocked on Windows** (`swebench` 4.1.0 imports `resource`); the harness
+    documents running the scoring step from WSL/Linux. Image pulls were skipped.
+12. **Reranker dropped** after measurement (no Recall@5 gain, +14 s/query). **jina-code warm-up was started
+    then stopped** at the user's request; it resumes from cache.
+13. **Agent tool recommendation is BM25**, although hybrid won at Recall@1 on the subset, because a cold
+    hybrid index of one Django commit took 51 minutes on the laptop.
+14. **Lock file** produced from the installed Windows/Python 3.13 environment (no offline pip-compile/uv).
