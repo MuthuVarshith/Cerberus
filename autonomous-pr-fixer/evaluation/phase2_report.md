@@ -1,7 +1,8 @@
 # Phase 2 report: code retrieval
 
-Status: **Step 1 complete; Step 2 in progress** (chunking and BM25 measured on 120 instances; dense,
-hybrid and rerank to be measured on a 40-instance subset).
+Status: **Step 1 and Step 2 complete for bge-small** (chunking and BM25 on 120 instances; dense,
+hybrid and rerank with `BAAI/bge-small-en-v1.5` on a 40-instance subset). The `jina-code` embedding
+warm-up is running; its vector / hybrid scores are pending. End-to-end agent effect (Step 4): pending.
 
 ## Localization benchmark (`cerberus-localization-v1`)
 
@@ -74,7 +75,7 @@ was deleted mid-run. Fixed in `e9b5419` (workspaces under `artifacts/tmp`). That
   half the instances, and for 37 of the 86 issues that don't name a file it never ranks one. That is
   the gap retrieval has to close, and the benchmark can measure it.
 
-## Step 2 results (in progress)
+## Step 2 results
 
 ### Chunking and BM25 on all 120 instances
 
@@ -161,3 +162,146 @@ at 1.3 GHz during the runs): the 120 need 158,359 distinct chunks embedded; the 
 Measured embedding throughput: `BAAI/bge-small-en-v1.5` (384-d) about 5–7 chunks/s,
 `jinaai/jina-embeddings-v2-base-code` (768-d) 1.68 chunks/s. bge-small runs first; jina-code is
 embedded only if bge-small vector search adds measurable value over BM25.
+
+### All methods on the 40-instance subset
+
+Same 40 instances for every row. Phase 1 and BM25 rows are the 120-instance runs restricted to the
+subset (`subset_scores.py`); the others were run on the subset. Every retriever after BM25 uses the
+frozen sum-of-top-3 aggregation, 300 candidate chunks per retriever, RRF k = 60; the reranker
+(`jinaai/jina-reranker-v1-turbo-en`) rescores the top 30 fused chunks. Timings are medians over the
+40 instances; "index" for vector / hybrid is cache lookup + Qdrant upload (+ BM25 build for hybrid)
+with every vector already cached (0 chunks embedded during the runs), so it excludes embedding cost.
+
+| Method | R@1 | R@5 | R@10 | All@10 | MRR | Gold never ranked | Total per instance | Index | Query | Rerank | Cerberus |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Phase 1 localizer | 0.113 | 0.312 | 0.438 | 0.400 | 0.236 | 17 | 9.93 s | - | - | - | `cbaaa39` |
+| BM25, best chunk | 0.325 | 0.637 | 0.775 | 0.750 | 0.509 | 0 | 1.85 s | 0.99 s | 0.014 s | - | `d3620df` |
+| BM25, sum of top 3 | 0.362 | 0.700 | 0.900 | 0.900 | 0.527 | 0 | 3.04 s | 1.63 s | 0.032 s | - | `7d696f2` |
+| Vector, bge-small | 0.525 | 0.787 | 0.912 | 0.900 | 0.663 | 0 | 1.84 s | 0.88 s | 0.128 s | - | `0cf0e0b` |
+| Hybrid (BM25 + bge-small, RRF) | 0.512 | 0.850 | 0.963 | 0.950 | 0.679 | 0 | 2.77 s | 1.84 s | 0.142 s | - | `0cf0e0b` |
+| Hybrid + rerank | 0.500 | 0.800 | 0.863 | 0.850 | 0.657 | 0 | 32.64 s | 7.08 s | 1.854 s | 14.07 s | `c341c2f` |
+
+The rerank run ran under heavier machine load than the others (its identical hybrid index step took
+a median 7.08 s against 1.84 s in the hybrid run), so compare its rerank cost within that run: the
+rerank step took a median 8.5 times the fused query time of the same instance. Median 9,820 chunks
+and 820 candidate files per instance. Results: `localization/results/sub40-*.json`.
+
+### Paired significance on the subset (n = 40)
+
+Same tests as above (`significance.py ... --only-ids localization/instances-v1-sub40.jsonl`).
+Difference is B − A; "A-only / B-only" counts instances where only one method hits.
+
+**Vector (bge-small) vs BM25 sum of top 3**
+
+| Metric | Diff | 95% CI | A-only / B-only | p (exact) |
+| --- | --- | --- | --- | --- |
+| Recall@1 | +0.163 | [+0.013, +0.312] | 3 / 10 | 0.092 |
+| Recall@5 | +0.087 | [-0.062, +0.250] | 4 / 7 | 0.55 |
+| Recall@10 | +0.013 | [-0.125, +0.150] | 3 / 4 | 1 |
+| MRR | +0.136 | [+0.017, +0.258] | — | — |
+
+**Hybrid (bge-small) vs BM25 sum of top 3**
+
+| Metric | Diff | 95% CI | A-only / B-only | p (exact) |
+| --- | --- | --- | --- | --- |
+| Recall@1 | +0.150 | [+0.050, +0.263] | 0 / 7 | 0.016 |
+| Recall@5 | +0.150 | [+0.013, +0.300] | 2 / 8 | 0.11 |
+| Recall@10 | +0.062 | [-0.013, +0.150] | 0 / 3 | 0.25 |
+| MRR | +0.152 | [+0.066, +0.248] | — | — |
+
+**Hybrid vs vector (both bge-small)**
+
+| Metric | Diff | 95% CI | A-only / B-only | p (exact) |
+| --- | --- | --- | --- | --- |
+| Recall@1 | -0.013 | [-0.150, +0.113] | 4 / 4 | 1 |
+| Recall@5 | +0.062 | [-0.050, +0.175] | 2 / 5 | 0.45 |
+| Recall@10 | +0.050 | [-0.050, +0.150] | 1 / 3 | 0.62 |
+| MRR | +0.016 | [-0.061, +0.092] | — | — |
+
+**Hybrid + rerank vs hybrid**
+
+| Metric | Diff | 95% CI | A-only / B-only | p (exact) |
+| --- | --- | --- | --- | --- |
+| Recall@1 | -0.013 | [-0.138, +0.113] | 4 / 3 | 1 |
+| Recall@5 | -0.050 | [-0.150, +0.050] | 3 / 1 | 0.62 |
+| Recall@10 | -0.100 | [-0.200, -0.025] | 4 / 0 | 0.12 |
+| MRR | -0.022 | [-0.100, +0.061] | — | — |
+
+**Hybrid vs Phase 1 localizer**
+
+| Metric | Diff | 95% CI | A-only / B-only | p (exact) |
+| --- | --- | --- | --- | --- |
+| Recall@1 | +0.400 | [+0.250, +0.550] | 1 / 18 | 7.6e-05 |
+| Recall@5 | +0.537 | [+0.362, +0.700] | 1 / 23 | 3e-06 |
+| Recall@10 | +0.525 | [+0.375, +0.675] | 0 / 20 | 1.9e-06 |
+| MRR | +0.443 | [+0.290, +0.592] | — | — |
+
+Reading: against BM25, the dense signal helps **at the top of the ranking**: hybrid puts a gold file
+first in 7 instances where BM25 does not and never the reverse (Recall@1 p = 0.016), and its MRR
+interval excludes zero. At Recall@10 BM25 (sum of top 3) is already at 0.900 and the differences are
+within noise. Vector alone and hybrid are statistically indistinguishable on 40 instances. The
+reranker did not help on any metric. These p-values are not corrected for multiple comparisons:
+over the 15 McNemar tests above (5 comparisons × 3 cut-offs), a Bonferroni threshold of 0.0033 is
+met only by the comparison with Phase 1.
+
+### Decisions (rules fixed before the subset runs)
+
+| Component | Decision | Reason (measured) |
+| --- | --- | --- |
+| Hybrid BM25 + bge-small | **kept** (over BM25 alone) | beats BM25 sum-of-top-3 in a paired test: Recall@1 +0.150 [+0.050, +0.263], McNemar 0 / 7, p = 0.016; MRR +0.152 [+0.066, +0.248]. No significant difference at Recall@5 (p = 0.11) or Recall@10 (p = 0.25); uncorrected p-values |
+| Vector alone | not used on its own | no significant difference from hybrid; hybrid keeps BM25's exact-identifier matching |
+| jina-code embeddings | **warm-up started** | rule (a): bge-small hybrid beat BM25 measurably (above). Scores pending |
+| Cross-encoder reranker | **dropped** | rule (b): no Recall@5 gain (−0.050 [−0.150, +0.050], p = 0.62; Recall@10 −0.100 [−0.200, −0.025], p = 0.12) at a median 14.07 s per query, 8.5 times the fused query time |
+| BM25 alone | not the best ranker, but the recommended agent default (below) | rule (c) does not apply: hybrid beat BM25 at the top ranks |
+| Aggregation | unchanged (sum of top 3, frozen) | — |
+
+### Retriever for the agent tool
+
+`RETRIEVAL` (off by default, `none`) accepts `bm25`, `hybrid-bge-small` and `hybrid-jina-code`; there is
+no rerank option. Inside the agent the index is built on the agent's own workspace, so a hybrid
+retriever must embed every chunk the embedding cache has not seen. Measured in the bge-small warm-up
+log (`artifacts/swebench/warm-bge-small.log`, plugged in): one complete Django commit, 9,950 chunks
+none cached, took 51 min (3.25 chunks/s); the next Django commit, 636 changed chunks, took about
+2 min. The agent's default run budget is `MAX_RUN_TIME=1800` s. BM25 needs no model: median chunk +
+index time on the subset is 2.9 s (1.30 s + 1.63 s) per SWE-bench-sized repository.
+
+**Recommendation: `RETRIEVAL=bm25`** for agent runs on CPU-only machines like the development
+laptop. Use `hybrid-bge-small` only where the repository's chunk embeddings are already cached
+(e.g. the 40 subset instances, all warmed) or on faster hardware, where it adds the measured
+Recall@1 / MRR gain. `hybrid-jina-code`: no recommendation until it is scored. Retrieval stays off
+unless a run opts in, and whether it helps the agent end to end is measured in Step 4, not here.
+
+### jina-code: running
+
+Started 2026-10-11 as a detached, below-normal-priority process (resumable; vectors committed every
+512):
+
+    python -u evaluation/localization/warm_embeddings.py --model jina-code
+    # log: artifacts/swebench/warm-jina-code.log (finished when the last line starts with "done:")
+
+When it has finished, score and test on the same subset:
+
+    python -u evaluation/localization/run.py --method vector-jina-code --instances evaluation/localization/instances-v1-sub40.jsonl --out sub40-vector-jina-code
+    python -u evaluation/localization/run.py --method hybrid-jina-code --instances evaluation/localization/instances-v1-sub40.jsonl --out sub40-hybrid-jina-code
+    python evaluation/localization/significance.py evaluation/localization/results/sub40-hybrid-bge-small.json evaluation/localization/results/sub40-hybrid-jina-code.json --only-ids evaluation/localization/instances-v1-sub40.jsonl
+    python evaluation/localization/significance.py evaluation/localization/results/bm25-sum3.json evaluation/localization/results/sub40-hybrid-jina-code.json --only-ids evaluation/localization/instances-v1-sub40.jsonl
+
+If the warm-up is stopped, rerunning the same command continues from the cache.
+
+### Caveats
+
+- **n = 40 is small.** 95% intervals are roughly ±0.10–0.15 wide; a difference of 3 instances (e.g.
+  hybrid vs BM25 at Recall@10) is not distinguishable from noise. The hybrid-over-BM25 result rests
+  on Recall@1 and MRR, is uncorrected for multiple comparisons, and should be confirmed on more
+  instances.
+- **Post-hoc aggregation.** Sum of top 3 was chosen on the 120 BM25 results, which include these 40
+  instances. It is applied to every retriever, but it was selected on BM25, so if anything it favours
+  the BM25 rows.
+- **Subset coverage.** sympy and matplotlib are excluded from the subset; nothing here speaks for them.
+- **Laptop timings.** One CPU-only laptop, load varying between runs (see the rerank run). Cold
+  bge-small throughput per instance in the warm-up log ranged from 0.80 to 7.99 chunks/s; the slow
+  end coincides with running on battery. Timings are indicative, not benchmarks.
+- **One configuration each.** One embedding model, one reranker, fixed candidate counts and RRF k;
+  none were tuned. The reranker result says this reranker at these settings did not help, not that
+  reranking cannot.
+- **jina-code pending**; the decision table will be updated when it is scored.
